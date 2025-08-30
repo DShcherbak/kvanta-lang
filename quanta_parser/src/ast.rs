@@ -51,31 +51,37 @@ impl fmt::Display for VariableCall {
 
 impl fmt::Display for SimpleExpression {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            SimpleExpression::Value(value) => write!(f, "{}", value),
-            SimpleExpression::Unary(op, expr) => write!(f, "{:?}({})", op, expr),
-            SimpleExpression::Binary(op, left, right) => write!(f, "({} {:?} {})", left, op, right),
+        match &self.expr {
+            SimpleExpressionType::Value(value) => write!(f, "{}", value),
+            SimpleExpressionType::Unary(op, expr) => write!(f, "{:?}({})", op, expr),
+            SimpleExpressionType::Binary(op, left, right) => write!(f, "({} {:?} {})", left, op, right),
         }
     }
 }
 
 impl fmt::Display for SimpleValue {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            SimpleValue::Id(var) => write!(f, "{}", var),
-            SimpleValue::Int(value) => write!(f, "{}", value),
+        match &self.val {
+            SimpleValueType::Id(var) => write!(f, "{}", var),
+            SimpleValueType::Int(value) => write!(f, "{}", value),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum SimpleValue {
+pub enum SimpleValueType {
     Id(VariableCall),
     Int(i32)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SimpleValue {
+    val: SimpleValueType,
+    coords: (usize, usize, usize, usize)
+}
+
 #[derive(Debug, Clone, PartialEq)]
-pub enum BaseValue {
+pub enum BaseValueType {
     Id(VariableCall),
     Int(i32),
     Bool(bool),
@@ -84,6 +90,12 @@ pub enum BaseValue {
     Float(f32),
     Array(Vec<BaseValue>), // Array of BaseValues
     FunctionCall(String, Vec<Expression>, Type), // Function call with name and arguments
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BaseValue {
+    pub val: BaseValueType,
+    pub coords: Coords
 }
 
 
@@ -144,32 +156,32 @@ impl BaseValue {
         where F: Fn(&VariableCall) -> Option<Type>  
     {
         use TypeName::*;
-        match self {
-            BaseValue::Id(name) => {
-                if let Some(type_) = get_var_type(name) {
+        match &self.val {
+            BaseValueType::Id(name) => {
+                if let Some(type_) = get_var_type(&name) {
                     Ok(type_.type_name)
                 } else {
-                    Err(Error::TypeError { message: format!("Variable type unknown: {}", name.to_string()).into() })
+                    Err(Error::typeEr(format!("Variable type unknown: {}", name.to_string()), self.coords))
                 }
             }, 
-            BaseValue::Int(_) => Ok(Primitive(BaseType::Int)),
-            BaseValue::Bool(_) => Ok(Primitive(BaseType::Bool)),
-            BaseValue::Color(_, _, _) => Ok(Primitive(BaseType::Color)),
-            BaseValue::RandomColor => Ok(Primitive(BaseType::Color)),
-            BaseValue::Float(_) => Ok(Primitive(BaseType::Float)),
-            BaseValue::Array(elems) => {
+            BaseValueType::Int(_) => Ok(Primitive(BaseType::Int)),
+            BaseValueType::Bool(_) => Ok(Primitive(BaseType::Bool)),
+            BaseValueType::Color(_, _, _) => Ok(Primitive(BaseType::Color)),
+            BaseValueType::RandomColor => Ok(Primitive(BaseType::Color)),
+            BaseValueType::Float(_) => Ok(Primitive(BaseType::Float)),
+            BaseValueType::Array(elems) => {
                 if elems.is_empty() {
                     return Ok(Array(Box::new(None), 0));
                 }
                 let type_ = elems.first().unwrap().clone().get_type(get_var_type)?;
                 for elem in elems {
                     if elem.get_type(get_var_type)? != type_ {
-                        return Err(Error::TypeError { message: format!("Array type unknown").into() });
+                        return Err(Error::typeEr(format!("Array type unknown"), self.coords));
                     }
                 }
                 Ok(Array(Box::new(Some(Type{type_name:type_, is_const:false})), elems.len()))
             }
-            BaseValue::FunctionCall(_, _, t) => {
+            BaseValueType::FunctionCall(_, _, t) => {
                 Ok(t.type_name.clone())
             }
         }
@@ -232,38 +244,53 @@ pub fn goes_before(op1 : Operator,  op2: Operator) -> bool {
 
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum SimpleExpression {
+pub enum SimpleExpressionType {
     Value(SimpleValue),
     Unary(UnaryOperator, Box<SimpleExpression>),
     Binary(Operator, Box<SimpleExpression>, Box<SimpleExpression>)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SimpleExpression {
+    expr: SimpleExpressionType,
+    coords: (usize, usize, usize, usize)
+}
+
 impl SimpleExpression {
     pub fn to_expr(self) -> Expression {
-        match self {
-            SimpleExpression::Value(value) => {
-                Expression::Value(match value {
-                    SimpleValue::Id(var) => BaseValue::Id(var),
-                    SimpleValue::Int(i) => BaseValue::Int(i),
-                })   
+        match self.expr {
+            SimpleExpressionType::Value(value) => {
+                Expression{expr_type: ExpressionType::Value(match value.val {
+                    SimpleValueType::Id(var) => BaseValue{val: BaseValueType::Id(var), coords: value.coords},
+                    SimpleValueType::Int(i) => BaseValue{val: BaseValueType::Int(i), coords: value.coords},
+                }), coords: self.coords}
             }
-            SimpleExpression::Unary(op, expr) => Expression::Unary(op, Box::new(expr.to_expr())),
-            SimpleExpression::Binary(op, left, right) => {
-                Expression::Binary(op, Box::new(left.to_expr()), Box::new(right.to_expr()))
-            }
+            SimpleExpressionType::Unary(op, expr) => 
+                Expression{ expr_type: ExpressionType::Unary(op, Box::new(expr.to_expr())), coords: self.coords},
+            SimpleExpressionType::Binary(op, left, right) => 
+                Expression{ expr_type: ExpressionType::Binary(op, Box::new(left.to_expr()), Box::new(right.to_expr()))
+                    , coords: self.coords}
         }
     }
 }
 
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Expression {
+pub enum ExpressionType {
     Value(BaseValue),
     Unary(UnaryOperator, Box<Expression>),
     Binary(Operator, Box<Expression>, Box<Expression>)
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Expression {
+    pub expr_type: ExpressionType,
+    pub coords: (usize, usize, usize, usize)
+}
+
+
 #[derive(Debug, Clone)]
-pub enum AstNode {
+pub enum AstStatement {
     Command { name: String, args: Vec<Expression> },
     Init    { typ: Type, val : String, expr: Expression },
     SetVal { val: VariableCall, expr: Expression },
@@ -273,15 +300,21 @@ pub enum AstNode {
     Return  { expr: Expression },
 }
 
+#[derive(Debug, Clone)]
+pub struct AstNode {
+    pub statement: AstStatement,
+    pub coords: (usize, usize, usize, usize)
+}
+
 impl Expression {
     pub fn get_type<F>(&self, get_var_type: &F) -> Result<TypeName, Error>
         where F: Fn(&VariableCall) -> Option<Type>
     {
-        let type_mismatch = Err(Error::TypeError { message: format!("Type mismatch error").into() });
-        match &self {
-            Expression::Value(base_value) => base_value.get_type(get_var_type),
-            Expression::Unary(_, expr) => expr.get_type(get_var_type),
-            Expression::Binary(_, e1, e2) => {
+        let type_mismatch = Err(Error::typeEr(format!("Type mismatch error"), self.coords));
+        match &self.expr_type {
+            ExpressionType::Value(base_value) => base_value.get_type(get_var_type),
+            ExpressionType::Unary(_, expr) => expr.get_type(get_var_type),
+            ExpressionType::Binary(_, e1, e2) => {
                 let t1 = e1.get_type(get_var_type)?;
                 let t2 = e2.get_type(get_var_type)?;
                 if let TypeName::Array(ar_typ_1, ar_sz_1) = &t1 {
@@ -311,10 +344,12 @@ impl Expression {
     }
 }
 
+pub type Coords = (usize, usize, usize, usize);
 
 #[derive(Debug, Clone)]
 pub struct AstBlock {
-    pub nodes : Vec<AstNode>
+    pub nodes : Vec<AstNode>,
+    pub coords: Coords,
 }
 
 
@@ -323,7 +358,8 @@ pub struct HalfParsedAstFunction<'a> {
     pub name: String,
     pub args: Vec<(String, Type)>,
     pub return_type: Option<Type>,
-    pub statements: Pairs<'a, Rule>
+    pub statements: Pairs<'a, Rule>,
+    pub coords: Coords
 }
 
 #[derive(Debug, Clone)]
@@ -331,10 +367,11 @@ pub struct AstFunction {
     pub name: String,
     pub args: Vec<(String, Type)>,
     pub return_type: Option<Type>,
-    pub block: AstBlock
+    pub block: AstBlock,
+    pub header: Coords,
 }
 
-pub type FunctionsAndGlobals = (Vec<AstFunction>, HashMap<String, (Type, Expression)>);
+pub type FunctionsAndGlobals = (Vec<AstFunction>, HashMap<String, (Coords, Type, Expression)>);
 
 #[derive(Debug, Clone)]
 pub enum AstProgram {

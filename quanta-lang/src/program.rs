@@ -145,42 +145,42 @@ impl Program {
             AstProgram::Forest(ref forest) => {
                 for func in &forest.0 {
                     if self.keywords.contains(&func.name) {
-                        return Err(Error::TypeError { message: format!("'{}' is a keyword, it cannot be the name of a function", func.name).into() });
+                        return Err(Error::typeEr(format!("'{}' is a keyword, it cannot be the name of a function", func.name), func.header));
                     }
                     for (argname, _) in &func.args {
                         if self.keywords.contains(argname) { 
-                            return Err(Error::TypeError { message: format!("'{}' is a keyword, it cannot be the name of a variable", argname).into() }); 
+                            return Err(Error::typeEr(format!("'{}' is a keyword, it cannot be the name of a variable", argname), func.header));
                         }
                     }
                     if &func.name == "keyboard" {
                         if func.args.len() != 1 {
-                            return Err(Error::TypeError { message: format!("Special function 'keyboard' has to have exactly 1 argument").into() });
+                            return Err(Error::typeEr(format!("Special function 'keyboard' has to have exactly 1 argument"), func.header));
                         }
                         if func.args.get(0).unwrap().clone().1.type_name != TypeName::Primitive(BaseType::Int) {
-                            return Err(Error::TypeError { message: format!("Special function 'keyboard' has to receive an integer, but got {}", func.args.get(0).unwrap().clone().1.to_string()).into() });
+                            return Err(Error::typeEr(format!("Special function 'keyboard' has to receive an integer, but got {}", func.args.get(0).unwrap().clone().1.to_string()), func.header));
                         }
                     }
                     if &func.name == "mouse" {
                         if func.args.len() != 2 {
-                            return Err(Error::TypeError { message: format!("Special function 'mouse' has to have exactly 2 arguments").into() });
+                            return Err(Error::typeEr(format!("Special function 'mouse' has to have exactly 2 arguments"), func.header));
                         }
                         if func.args.get(0).unwrap().clone().1.type_name != TypeName::Primitive(BaseType::Int)
                          || func.args.get(1).unwrap().clone().1.type_name != TypeName::Primitive(BaseType::Int) {
-                            return Err(Error::TypeError { message: format!("Special function 'mouse' has to receive two integers, but got {} and {}", func.args.get(0).unwrap().clone().1.to_string(), func.args.get(1).unwrap().clone().1.to_string()).into() });
+                            return Err(Error::typeEr(format!("Special function 'mouse' has to receive two integers, but got {} and {}", func.args.get(0).unwrap().clone().1.to_string(), func.args.get(1).unwrap().clone().1.to_string()), func.header));
                         }
                     }
                     self.function_defs.insert(func.name.clone(), (func.args.clone(), func.return_type.clone()));
                 }
-                for (name, (typ, expr)) in &forest.1 {
+                for (name, (coords, typ, expr)) in &forest.1 {
                     if self.keywords.contains(name) {
-                        return Err(Error::TypeError { message: format!("'{}' is a keyword, it cannot be the name of a variable", name).into() });
+                        return Err(Error::typeEr(format!("'{}' is a keyword, it cannot be the name of a variable", name), *coords));
                     }
                     let expr_type = self.type_check_expr(&expr.clone())?;
                     if expr_type.type_name != typ.type_name {
-                        return Err(Error::TypeError { message: format!("Global variable {} of type {} cannot be assigned a type {}", name, typ.to_string(), expr_type.to_string()).into() });
+                        return Err(Error::typeEr(format!("Global variable {} of type {} cannot be assigned a type {}", name, typ.to_string(), expr_type.to_string()), *coords));
                     }
                     if self.contains_key(name) {
-                        return Err(Error::LogicError { message: format!("Global variable {} is re-defined!", name).into() });
+                        return Err(Error::logic(format!("Global variable {} is re-defined!", name), *coords));
                     }
                     self.global_vars.insert(name.clone(), (typ.clone(), expr.clone()));
                 }
@@ -190,12 +190,12 @@ impl Program {
                     for arg in &func.args {
                         let simple_expr = {
                             match arg.1.type_name.clone() {
-                                Primitive(Int) => Expression::Value(BaseValue::Int(0)),
-                                Primitive(Float) => Expression::Value(BaseValue::Float(0.0)),
-                                Primitive(Bool) => Expression::Value(BaseValue::Bool(false)),
-                                Primitive(Color) => Expression::Value(BaseValue::RandomColor),
+                                Primitive(Int) => Expression{expr_type: ExpressionType::Value(BaseValue{val: BaseValueType::Int(0), coords: (0,0,0,0)}), coords: (0,0,0,0)},
+                                Primitive(Float) => Expression{expr_type: ExpressionType::Value(BaseValue{val: BaseValueType::Float(0.0), coords: (0,0,0,0)}), coords: (0,0,0,0)},
+                                Primitive(Bool) => Expression{expr_type: ExpressionType::Value(BaseValue{val: BaseValueType::Bool(false), coords: (0,0,0,0)}), coords: (0,0,0,0)},
+                                Primitive(Color) => Expression{expr_type: ExpressionType::Value(BaseValue{val: BaseValueType::Color(0,0,0), coords: (0,0,0,0)}), coords: (0,0,0,0)},
                                 Array(_, _) => {
-                                    Expression::Value(BaseValue::Array(vec![]))
+                                    Expression{expr_type: ExpressionType::Value(BaseValue{val: BaseValueType::Array(vec![]), coords: (0,0,0,0)}), coords: (0,0,0,0)}
                                 }
                             }
                         };
@@ -217,27 +217,27 @@ impl Program {
             Ok(ReturnType::Full(t)) => {
                 if let Some(return_type) = &func.return_type {
                     if t != *return_type {
-                        Some(Error::LogicError { message: format!("Function {} return type mismatch: expected {:?}, got {:?}", func.name, return_type, t).into() })
+                        Some(Error::logic(format!("Function {} return type mismatch: expected {:?}, got {:?}", func.name, return_type, t), func.header))
                     } else {
                         None
                     }
                 } else {
-                    Some(Error::LogicError { message: format!("Function {} has no return type defined, but returns {:?}", func.name, t).into() })
+                    Some(Error::logic(format!("Function {} has no return type defined, but returns {:?}", func.name, t), func.header))
                 }
             },
             Ok(ReturnType::Partial(t)) => {
                 if let Some(return_type) = &func.return_type {
                     if t != *return_type {
-                        return Some(Error::LogicError { message: format!("Function {} return type mismatch: expected {:?}, got {:?}", func.name, return_type, t).into() });
+                        return Some(Error::logic(format!("Function {} return type mismatch: expected {:?}, got {:?}", func.name, return_type, t), func.header));
                     }
-                    return Some(Error::LogicError { message: format!("Expected a return statement at the end of function {}", func.name).into() });
+                    return Some(Error::logic(format!("Expected a return statement at the end of function {}", func.name), func.header));
                 } else {
-                    return Some(Error::LogicError { message: format!("Function {} has no return type defined", func.name).into() });
+                    return Some(Error::logic(format!("Function {} has no return type defined", func.name), func.header));
                 }
             },
             Ok(ReturnType::None) => {
                 if let Some(rt) = func.return_type {
-                    return Some(Error::LogicError { message: format!("Function {} has a return type {:?} defined but does not return anything", func.name, rt).into() });
+                    return Some(Error::logic(format!("Function {} has a return type {:?} defined but does not return anything", func.name, rt), func.header));
                 }
                 None
             },
@@ -248,22 +248,22 @@ impl Program {
     pub fn type_check_block(&mut self, block : AstBlock) -> Result<ReturnType, Error> {
         let mut return_type: Option<Type> = None;
         for line in block.nodes {
-            match line {
-                AstNode::Command { name, args } => {
-                    if let Some(err) = self.clone().type_check_command(name.clone(), args.clone()) {
+            match line.statement {
+                AstStatement::Command { name, args } => {
+                    if let Some(err) = self.clone().type_check_command(name.clone(), args.clone(), line.coords) {
                         return Err(err);
                     }
                 },
-                AstNode::Init { typ, val, expr } => {
-                     match self.clone().type_check_init(typ.clone(), val.clone(), expr.clone()) {
+                AstStatement::Init { typ, val, expr } => {
+                     match self.clone().type_check_init(typ.clone(), val.clone(), expr.clone(), line.coords) {
                         Err(err) => return Err(err),
                         Ok(tupl) => {
                             self.scope.variables.insert(val.clone().trim().to_string(), tupl);
                         }
                     }
                 },
-                AstNode::SetVal { val, expr } => {
-                    match self.clone().type_check_set_val(val.clone(), expr.clone()) {
+                AstStatement::SetVal { val, expr } => {
+                    match self.clone().type_check_set_val(val.clone(), expr.clone(), line.coords) {
                         Err(err) => return Err(err),
                         Ok((var_type, expr)) => {
                             if self.global_vars.contains_key(val.clone().to_string().as_str()) {
@@ -275,14 +275,14 @@ impl Program {
                         }
                     }
                 },
-                AstNode::If { clause, block, else_block } => {
+                AstStatement::If { clause, block, else_block } => {
                     let if_prog = self.create_subprogram(None);
                     match if_prog.type_check_if(clause.clone(), block.clone(), else_block.clone())? {   
                         ReturnType::None => {},
                         ReturnType::Partial(t) => {
                             if let Some(rt) = &return_type {
                                 if *rt != t {
-                                    return Err(Error::LogicError { message: format!("If block return type mismatch: expected {:?}, got {:?}", rt, t).into() });
+                                    return Err(Error::logic(format!("If block return type mismatch: expected {:?}, got {:?}", rt, t), line.coords));
                                 }
                             } else {
                                 return_type = Some(t);
@@ -291,20 +291,20 @@ impl Program {
                         ReturnType::Full(t) => {
                             if let Some(rt) = &return_type {
                                 if *rt != t {
-                                    return Err(Error::LogicError { message: format!("If block return type mismatch: expected {:?}, got {:?}", rt, t).into() });
+                                    return Err(Error::logic(format!("If block return type mismatch: expected {:?}, got {:?}", rt, t), line.coords));
                                 }
                             }
                             return Ok(ReturnType::Full(t));
                         }
                     }
                 },
-                AstNode::For { val, from, to, block } => {
-                    match self.create_subprogram(None).type_check_for(val.clone(), from.clone(), to.clone(), block.clone())? {
+                AstStatement::For { val, from, to, block } => {
+                    match self.create_subprogram(None).type_check_for(val.clone(), from.clone(), to.clone(), block.clone(), line.coords)? {
                         ReturnType::None => {},
                         ReturnType::Partial(t) => {
                             if let Some(rt) = &return_type {
                                 if *rt != t {
-                                    return Err(Error::LogicError { message: format!("For block return type mismatch: expected {:?}, got {:?}", rt, t).into() });
+                                    return Err(Error::logic(format!("For block return type mismatch: expected {:?}, got {:?}", rt, t), line.coords));
                                 }
                             } else {
                                 return_type = Some(t);
@@ -313,20 +313,20 @@ impl Program {
                         ReturnType::Full(t) => {
                             if let Some(rt) = &return_type {
                                 if *rt != t {
-                                    return Err(Error::LogicError { message: format!("For block return type mismatch: expected {:?}, got {:?}", rt, t).into() });
+                                    return Err(Error::logic(format!("For block return type mismatch: expected {:?}, got {:?}", rt, t), line.coords));
                                 }
                             }
                             return Ok(ReturnType::Full(t));
                         }
                     }
                 },
-                AstNode::While { clause, block } => {
+                AstStatement::While { clause, block } => {
                     match self.create_subprogram(None).type_check_while(clause.clone(), block.clone())? {
                         ReturnType::None => {},
                         ReturnType::Partial(t) => {
                             if let Some(rt) = &return_type {
                                 if *rt != t {
-                                    return Err(Error::LogicError { message: format!("For block return type mismatch: expected {:?}, got {:?}", rt, t).into() });
+                                    return Err(Error::logic(format!("For block return type mismatch: expected {:?}, got {:?}", rt, t), line.coords));
                                 }
                             } else {
                                 return_type = Some(t);
@@ -335,18 +335,18 @@ impl Program {
                         ReturnType::Full(t) => {
                             if let Some(rt) = &return_type {
                                 if *rt != t {
-                                    return Err(Error::LogicError { message: format!("For block return type mismatch: expected {:?}, got {:?}", rt, t).into() });
+                                    return Err(Error::logic(format!("For block return type mismatch: expected {:?}, got {:?}", rt, t), line.coords));
                                 }
                             }
                             return Ok(ReturnType::Full(t));
                         }
                     }
                 }
-                AstNode::Return { expr } => {
+                AstStatement::Return { expr } => {
                     let expr_type = self.create_subprogram(None).type_check_expr(&expr)?;
                     if let Some(rt) = &return_type {
                         if *rt != expr_type {
-                            return Err(Error::LogicError { message: format!("Return type mismatch: expected {:?}, got {:?}", rt, expr_type).into() });
+                            return Err(Error::logic(format!("Return type mismatch: expected {:?}, got {:?}", rt, expr_type), line.coords));
                         }
                     }
                     return Ok(ReturnType::Full(expr_type))
@@ -361,19 +361,19 @@ impl Program {
     }
 
 
-    fn type_check_command(&self, name : String, args : Vec<Expression>) -> Option<Error> {
+    fn type_check_command(&self, name : String, args : Vec<Expression>, coords: Coords) -> Option<Error> {
         // todo warning unused return type
         if let Some((params, _)) = self.function_defs.get(&name) {
             if name == "polygon" {
                 if args.len() < 6 || args.len() % 2 != 0 {
-                    return Some(Error::LogicError { message: format!("Wrong number of arguments for command polygon: got {}, expected at least 6 (even number) for polygon", args.len()).into() });
+                    return Some(Error::logic(format!("Wrong number of arguments for command polygon: got {}, expected at least 6 (even number) for polygon", args.len()), coords));
                 }
                 for arg in &args {
                     match self.clone().type_check_expr(arg) {
                         Err(error) => return Some(error),
                         Ok(arg_type) => {
                             if arg_type.type_name != Primitive(Int) {
-                                return Some(Error::TypeError { message: format!("Wrong type of argument for command {}: got {:?}, expected Int", name, arg_type).into() });
+                                return Some(Error::typeEr(format!("Wrong type of argument for command {}: got {:?}, expected Int", name, arg_type), coords));
                             }
                         }
                     }
@@ -381,47 +381,47 @@ impl Program {
                 return None;
             }
             if params.len() != args.len() {
-                return Some(Error::LogicError { message: format!("Wrong number of arguments for command {}: got {}, expected {}", name, args.len(), params.len()).into() });
+                return Some(Error::logic(format!("Wrong number of arguments for command {}: got {}, expected {}", name, args.len(), params.len()), coords));
             }
             for (i, (param_name,param_type)) in params.iter().enumerate() {
                 match self.clone().type_check_expr(&args[i]) {
                     Err(error) => return Some(error),
                     Ok(arg_type) => {
                         if arg_type.type_name != param_type.type_name {
-                            return Some(Error::TypeError { message: format!("Wrong type of argument '{}' for command {}: got {:?}, expected {:?}", param_name, name, arg_type, params[i]).into() });
+                            return Some(Error::typeEr(format!("Wrong type of argument '{}' for command {}: got {:?}, expected {:?}", param_name, name, arg_type, params[i]), coords));
                         }
                     }
                 }
                 
             }
         } else {
-            return Some(Error::LogicError { message: format!("Unknown command: {}", name).into() });
+            return Some(Error::logic(format!("Unknown command: {}", name), coords));
         }
         None
     }
 
-    fn type_check_set_val(&self, val: VariableCall, expr: Expression) -> Result<(Type, Expression), Error> {
-        let var_type = self.clone().type_check_var(&val)?;
+    fn type_check_set_val(&self, val: VariableCall, expr: Expression, coords: Coords) -> Result<(Type, Expression), Error> {
+        let var_type = self.clone().type_check_var(&val, coords)?;
         if var_type.is_const {
-            return Err(Error::TypeError { message: format!("Const variable {} cannot be reassigned", val).into() });
+            return Err(Error::typeEr(format!("Const variable {} cannot be reassigned", val), coords));
         }
         let expr_type = self.clone().type_check_expr(&expr)?;
         if !var_type.can_assign(&expr_type) {
-            return Err(Error::LogicError { message: format!("Cannot assign expression of type {:?} to variable {} of type {:?}!", expr_type, val, var_type).into() });
+            return Err(Error::logic(format!("Cannot assign expression of type {:?} to variable {} of type {:?}!", expr_type, val, var_type), coords));
         }
         Ok((var_type, expr))
     }
 
-    fn type_check_init(&self, new_type_def : Type, val : String, expr : Expression) -> Result<(Type, Expression), Error>{
+    fn type_check_init(&self, new_type_def : Type, val : String, expr : Expression, coords: Coords) -> Result<(Type, Expression), Error>{
         if self.keywords.contains(&val) {
-            return Err(Error::TypeError { message: format!("'{}' cannot be a variable, it is a keyword", val).into() })
+            return Err(Error::typeEr(format!("'{}' cannot be a variable, it is a keyword", val), coords));
         }
         if let Some(_) = self.get(&val) {
-            return Err(Error::LogicError { message: format!("Variable {} is re-defined!", val).into() }); 
+            return Err(Error::logic(format!("Variable {} is re-defined!", val), coords));
         } else {
             let expr_type = self.clone().type_check_expr(&expr)?;
             if !new_type_def.can_assign(&expr_type) {
-                return Err(Error::LogicError { message: format!("Cannot assign expression of type {:?} to variable {} of type {:?}!", expr_type, val, new_type_def).into() }); 
+                return Err(Error::logic(format!("Cannot assign expression of type {:?} to variable {} of type {:?}!", expr_type, val, new_type_def), coords));
             }
             Ok((new_type_def, expr))
         }
@@ -431,8 +431,11 @@ impl Program {
         let clause_type = self.clone().type_check_expr(&clause)?;
              
         if clause_type.type_name != Primitive(Bool) {
-            return Err(Error::LogicError { message: format!("If clause must be a bool expression").into() })
+            return Err(Error::logic(format!("If clause must be a bool expression"), clause.coords));
         }
+
+        let (l1, r1, _, _) = block.coords;
+
         let mut if_prog = self.create_subprogram(Some(block));
         let if_type = if_prog.type_check()?;
 
@@ -444,12 +447,14 @@ impl Program {
         }
 
         let else_block = else_block.unwrap();
+        let (_, _, l2, r2) = else_block.coords;
+
         let mut else_prog = self.create_subprogram(Some(else_block));
         let else_type = else_prog.type_check()?;
 
         if let (Some(t1), Some(t2)) = (if_type.t(), else_type.t()) {
             if t1 != t2 {
-                return Err(Error::LogicError { message: format!("Return type of if and else block must match: {:?} != {:?}", t1, t2).into() });
+                return Err(Error::logic(format!("Return type of if and else block must match: {:?} != {:?}", t1, t2), (l1, r1, l2, r2)));
             }
         }
 
@@ -461,21 +466,22 @@ impl Program {
         
     }
 
-    fn type_check_for(&self, val : String, from : BaseValue, to : BaseValue, block : AstBlock) -> Result<ReturnType, Error> {
+    fn type_check_for(&self, val : String, from : BaseValue, to : BaseValue, block : AstBlock, coords: Coords) -> Result<ReturnType, Error> {
         let t = self.clone().type_check_baseval(&from)?;
         let f = self.clone().type_check_baseval(&to)?;
         if t != f || t.type_name != Primitive(Int) {
-            return Err(Error::LogicError { message: format!("For loop range can only be integer values").into() })  
+            return Err(Error::logic(format!("For loop range can only be integer values"), from.coords))  
         }
         let mut for_prog = self.create_subprogram(Some(block));
-        for_prog.scope.variables.insert(val, (Type{type_name:Primitive(Int), is_const:false}, Expression::Value(from)));
+        for_prog.scope.variables.insert(val, (Type{type_name:Primitive(Int), is_const:false}, 
+            Expression{expr_type: ExpressionType::Value(from), coords}));
         for_prog.type_check()
     }
 
     fn type_check_while(&self, clause : Expression, block : AstBlock) -> Result<ReturnType, Error> {
         let clause_type = self.clone().type_check_expr(&clause)?;
         if clause_type.type_name != Primitive(Bool) {
-            return Err(Error::LogicError { message: format!("While clause must be a bool expression").into() });
+            return Err(Error::logic(format!("While clause must be a bool expression"), clause.coords));
         }
         let mut while_prog = self.clone();
         while_prog.lines = AstProgram::Block(block);
@@ -483,44 +489,44 @@ impl Program {
     }
 
     fn type_check_expr(&self, expr : &Expression) -> Result<Type, Error> {
-        match expr {
-            Expression::Value(base_value) => {
+        match &expr.expr_type {
+            ExpressionType::Value(base_value) => {
                 let expr_type =  self.clone().type_check_baseval(base_value)?;
                 Ok(expr_type)
             },
-            Expression::Unary(op, inner) => {
+            ExpressionType::Unary(op, inner) => {
                 match op {
                     UnaryOperator::UnaryMinus => {
                         let inner_type = self.clone().type_check_expr(&*inner)?;
                         if inner_type.type_name == Primitive(Int) {Ok(Type::typ(Int))} else 
                         if inner_type.type_name == Primitive(Float) {Ok(Type::typ(Float))} else 
-                        {Err(Error::TypeError { message: format!("Type mismatch in expression: {:?}", expr).into() })}
+                        {Err(Error::typeEr(format!("Type mismatch in expression: {:?}", expr.expr_type), expr.coords))}
                     },
                     UnaryOperator::NOT => {
                         let inner_type = self.clone().type_check_expr(&*inner)?;
                         if inner_type.type_name == Primitive(Bool) {
                             Ok(Type::typ(Bool))
                         } else {
-                            Err(Error::TypeError { message: format!("Type mismatch in expression: {:?}", expr).into() })
+                            Err(Error::typeEr(format!("Type mismatch in expression: {:?}", expr.expr_type), expr.coords))
                         }
                     },
                     UnaryOperator::Parentheses =>  self.clone().type_check_expr(&*inner),
                 }
             },
-            Expression::Binary(op, lhs, rhs) => {
+            ExpressionType::Binary(op, lhs, rhs) => {
                 let lhs_type =  self.clone().type_check_expr(&*lhs)?;
                 let rhs_type =  self.clone().type_check_expr(&*rhs)?;
                 if *op == Operator::AND || *op == Operator::OR {
                     if lhs_type.type_name != Primitive(Bool) || rhs_type.type_name != Primitive(Bool) {
-                        return Err(Error::TypeError { message: format!("Type mismatch in expression: {:?}", expr).into() })
+                        return Err(Error::typeEr(format!("Type mismatch in expression: {:?}", expr.expr_type), expr.coords))
                     }
                     Ok(Type::typ(Bool))
                 } else {
                     if lhs_type.type_name != Primitive(Int) && lhs_type.type_name != Primitive(Float) {
-                        return Err(Error::TypeError { message: format!("Type mismatch in expression: {:?}", expr).into() })
+                        return Err(Error::typeEr(format!("Type mismatch in expression: {:?}", expr.expr_type), expr.coords))
                     }
                     if rhs_type.type_name != Primitive(Int) && rhs_type.type_name!= Primitive(Float) {
-                        return Err(Error::TypeError { message: format!("Type mismatch in expression: {:?}", expr).into() })
+                        return Err(Error::typeEr(format!("Type mismatch in expression: {:?}", expr.expr_type), expr.coords))
                     }
                     if !is_arith(*op) {
                         return Ok(Type::typ(Bool))
@@ -534,50 +540,51 @@ impl Program {
         }
     }
 
-    fn recursive_type_check_var(&self, tp: &Type, depth: usize) -> Result<Type, Error> {
+    fn recursive_type_check_var(&self, tp: &Type, depth: usize, coords: Coords) -> Result<Type, Error> {
         if let Array(inner_type, _) = &tp.type_name {
             if let Some(inner) = inner_type.as_ref() {
                 if depth == 1 {
                     return Ok(inner.clone());
                 } else {
-                    return self.recursive_type_check_var(inner, depth - 1);
+                    return self.recursive_type_check_var(inner, depth - 1, coords);
                 }
             } else {
-                return Err(Error::ParseError { message: "Array type is not defined".into() });
+                return Err(Error::typeEr(String::from("Array type is not defined"), coords));
             }
         }
-        Err(Error::ParseError { message: "Expected an array type".into() })
+        Err(Error::typeEr(String::from("Expected an array type"), coords))
     }
 
-    fn type_check_var(&self, var: &VariableCall) -> Result<Type, Error> {
+    fn type_check_var(&self, var: &VariableCall, coords: Coords) -> Result<Type, Error> {
         let (name, depth) = match var {
             VariableCall::Name(name) => (name, 0),
             VariableCall::ArrayCall(name, inds) => (name, inds.len())
         };
         if self.keywords.contains(name) {
-            return Err(Error::TypeError { message: format!("'{}' is a keyword, it cannot be a name of a variable", name).into() });
+            return Err(Error::typeEr(format!("'{}' is a keyword, it cannot be a name of a variable", name), coords));
         }
         if let Some((tp, _)) = self.get(name) {
             if depth == 0 { 
                 return Ok(tp.clone());
             } else {
-                return self.recursive_type_check_var(tp, depth);
+                return self.recursive_type_check_var(tp, depth, coords);
             }
         } else {
-            Err(Error::LogicError { message: format!("Variable {} is not defined!", var).into() })
+            Err(Error::logic(format!("Variable {} is not defined!", var), coords))
         }
     }
 
     fn type_check_baseval(&self, base : &BaseValue) -> Result<Type, Error> {
         use BaseType::*;
-        match base {
-            BaseValue::Id(var) => self.type_check_var(var),
-            BaseValue::Int(_) => Ok(Type::typ(Int)),
-            BaseValue::Bool(_) => Ok(Type::typ(Bool)),
-            BaseValue::Color(_, _, _) => Ok(Type::typ(Color)),
-            BaseValue::RandomColor => Ok(Type::typ(Color)),
-            BaseValue::Float(_) => Ok(Type::typ(Float)),
-            BaseValue::Array(arr) => {
+        let coords = base.coords;
+        match &base.val {
+            BaseValueType::Id(var) => self.type_check_var(&var, coords),
+            BaseValueType::Int(_) => Ok(Type::typ(Int)),
+            BaseValueType::Bool(_) => Ok(Type::typ(Bool)),
+            BaseValueType::Color(_, _, _) => Ok(Type::typ(Color)),
+            BaseValueType::RandomColor => Ok(Type::typ(Color)),
+            BaseValueType::Float(_) => Ok(Type::typ(Float)),
+            BaseValueType::Array(arr) => {
                 let types: Result<Vec<Type>, Error> = arr.iter()
                     .map(|item| self.type_check_baseval(item))
                     .collect();
@@ -588,21 +595,21 @@ impl Program {
                 let inner_type = &types.first().unwrap().clone();
                 
                 if types.iter().any(|t| t.type_name != inner_type.type_name) {
-                    return Err(Error::TypeError { message: format!("Array elements must all be of type {:?}, got {:?}", inner_type, types).into() });
+                    return Err(Error::typeEr(format!("Array elements must all be of type {:?}, got {:?}", inner_type, types), base.coords));
                 }
                 Ok(Type{type_name:Array(Box::new(Some(inner_type.clone())), arr.len()), is_const: false})
             },
-            BaseValue::FunctionCall(name,arg_list, return_type ) => {
+            BaseValueType::FunctionCall(name,arg_list, return_type ) => {
                 match self.function_defs.get(name) {
-                    None => Err(Error::TypeError { message: format!("Unknown function {}", name).into() }),
+                    None => Err(Error::typeEr(format!("Unknown function {}", name), base.coords)),
                     Some((arg_defs, _)) => {
                         if arg_list.len() != arg_defs.len() {
-                            return Err(Error::TypeError { message: format!("Funcion '{}' expects {} arguments, but got {}", name, arg_defs.len(), arg_list.len()).into() })
+                            return Err(Error::typeEr(format!("Funcion '{}' expects {} arguments, but got {}", name, arg_defs.len(), arg_list.len()), base.coords))
                         }
                         for (i, (arg_name, arg_def)) in arg_defs.iter().enumerate() {
                             let expr_type = self.type_check_expr(arg_list.get(i).unwrap())?;
                             if !arg_def.can_assign(&expr_type) {
-                                return Err(Error::TypeError { message: format!("Funcion '{}' expects argument '{}' of type '{}', but got '{}'", name, arg_name, arg_def.to_string(), expr_type.to_string()).into() })
+                                return Err(Error::typeEr(format!("Funcion '{}' expects argument '{}' of type '{}', but got '{}'", name, arg_name, arg_def.to_string(), expr_type.to_string()), base.coords));
                             }
                         } 
                         Ok(return_type.clone())
