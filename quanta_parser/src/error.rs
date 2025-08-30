@@ -11,12 +11,12 @@ pub enum ErrorType {
     RuntimeError
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Error {
-    error_type: ErrorType,
-    message: String,
-    start: (usize, usize),
-    finish: (usize, usize)
+    pub error_type: ErrorType,
+    pub message: String,
+    pub start: (usize, usize),
+    pub finish: (usize, usize)
 }
 
 impl Error {
@@ -41,6 +41,15 @@ impl Error {
     pub fn logic(mes: String, pos: (usize, usize, usize, usize)) -> Error {
         Error {
             error_type: ErrorType::LogicError,
+            message: mes,
+            start: (pos.0, pos.1),
+            finish: (pos.2, pos.3)
+        }
+    }
+
+    pub fn runtime(mes: String, pos: (usize, usize, usize, usize)) -> Error {
+        Error {
+            error_type: ErrorType::RuntimeError,
             message: mes,
             start: (pos.0, pos.1),
             finish: (pos.2, pos.3)

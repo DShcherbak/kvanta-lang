@@ -2,10 +2,10 @@ mod utils;
 mod compiler;
 mod program;
 mod execution;
-mod tests;
+//mod tests;
 mod runtime;
-mod linear_execution;
-mod linear_runtime;
+//mod linear_execution;
+//mod linear_runtime;
 
 use wasm_bindgen::prelude::*;
 

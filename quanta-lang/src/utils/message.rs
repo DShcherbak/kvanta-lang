@@ -1,8 +1,9 @@
 use std::fmt;
 
 use wasm_bindgen::prelude::*;
-use quanta_parser::{error::Error};
-use crate::{linear_runtime, runtime::Runtime};
+use quanta_parser::error::{Error, ErrorType};
+use crate::runtime::Runtime;
+//use crate::linear_runtime;
 
 
 #[wasm_bindgen]
@@ -36,15 +37,19 @@ impl CommandBlock {
 pub struct CompilationMessage {
     pub error_code: u32,
     error_message: String,
-    runtime: Option<Runtime>
+    runtime: Option<Runtime>,
+    pub start_row: usize,
+    pub start_column: usize,
+    pub end_row: usize,
+    pub end_column: usize
 }
 
 
-pub struct LinearCompilationMessage {
-    pub error_code: u32,
-    error_message: String,
-    runtime: Option<linear_runtime::Runtime>
-}
+// pub struct LinearCompilationMessage {
+//     pub error_code: u32,
+//     error_message: String,
+//     runtime: Option<linear_runtime::Runtime>
+// }
 
 #[wasm_bindgen]
 impl CompilationMessage {
@@ -65,65 +70,71 @@ impl CompilationMessage {
         CompilationMessage {
             error_code: 0,
             error_message: "".to_string(),
-            runtime: Some(runtime)
+            runtime: Some(runtime),
+            start_row: 0,
+            start_column: 0,
+            end_row: 0,
+            end_column: 0
         }
     }
 
     pub(crate) fn create_error_message(error: Error) -> CompilationMessage {
-        match error {
-            Error::ParseError { ref message } => {
-                CompilationMessage { error_code:1, error_message: message.to_string(), runtime: None }
-            }
-            Error::LogicError { ref message } => {
-                CompilationMessage { error_code:2, error_message: message.to_string(), runtime: None }
-            }
-            Error::TypeError { ref message } => {
-                CompilationMessage { error_code:3, error_message: message.to_string(), runtime: None }
-            }
-            Error::RuntimeError { ref message } => {
-                CompilationMessage { error_code:4, error_message: message.to_string(), runtime: None }
-            }
+        CompilationMessage {
+            error_code: { 
+                match error.error_type {
+                    ErrorType::ParseError => {1},
+                    ErrorType::LogicError=> {2},
+                    ErrorType::TypeError=> {3},
+                    ErrorType::RuntimeError=> {4},
+                }
+            }, 
+            error_message: error.message.to_string(), 
+            runtime: None,
+            start_row: error.start.0,
+            start_column: error.start.1,
+            end_row: error.finish.0,
+            end_column: error.finish.1
         }
     }
 }
 
-impl LinearCompilationMessage {
+// impl LinearCompilationMessage {
 
 
-    pub fn get_runtime(&self) -> linear_runtime::Runtime {
-        self.runtime.clone().unwrap()
-    }
+//     pub fn get_runtime(&self) -> linear_runtime::Runtime {
+//         self.runtime.clone().unwrap()
+//     }
 
-    pub fn get_error_message(&self) -> String {
-        self.error_message.clone()
-    }
+//     pub fn get_error_message(&self) -> String {
+//         self.error_message.clone()
+//     }
 
 
-    pub(crate) fn ok(runtime: linear_runtime::Runtime) -> LinearCompilationMessage {
-        LinearCompilationMessage {
-            error_code: 0,
-            error_message: "".to_string(),
-            runtime: Some(runtime)
-        }
-    }
+//     pub(crate) fn ok(runtime: linear_runtime::Runtime) -> LinearCompilationMessage {
+//         LinearCompilationMessage {
+//             error_code: 0,
+//             error_message: "".to_string(),
+//             runtime: Some(runtime)
+//         }
+//     }
 
-    pub(crate) fn create_error_message(error: Error) -> LinearCompilationMessage {
-        match error {
-            Error::ParseError { ref message } => {
-                LinearCompilationMessage { error_code:1, error_message: message.to_string(), runtime: None }
-            }
-            Error::LogicError { ref message } => {
-                LinearCompilationMessage { error_code:2, error_message: message.to_string(), runtime: None }
-            }
-            Error::TypeError { ref message } => {
-                LinearCompilationMessage { error_code:3, error_message: message.to_string(), runtime: None }
-            }
-            Error::RuntimeError { ref message } => {
-                LinearCompilationMessage { error_code:4, error_message: message.to_string(), runtime: None }
-            }
-        }
-    }
-}
+//     pub(crate) fn create_error_message(error: Error) -> LinearCompilationMessage {
+//         match error.error_type {
+//             ErrorType::ParseError => {
+//                 LinearCompilationMessage { error_code:1, error_message: error.message.to_string(), runtime: None }
+//             }
+//             ErrorType::LogicError=> {
+//                 LinearCompilationMessage { error_code:2, error_message: error.message.to_string(), runtime: None }
+//             }
+//             ErrorType::TypeError=> {
+//                 LinearCompilationMessage { error_code:3, error_message: error.message.to_string(), runtime: None }
+//             }
+//             ErrorType::RuntimeError=> {
+//                 LinearCompilationMessage { error_code:4, error_message: error.message.to_string(), runtime: None }
+//             }
+//         }
+//     }
+// }
 
 
 

@@ -119,7 +119,9 @@ function doRun() {
       let compiler = Compiler.new();
       const compilation_result = await compiler.compile_code(src);   // Rust returns drawing commands (string)
       if (compilation_result.error_code != 0) {
-        alert(compilation_result.get_error_message());
+        alert(compilation_result.get_error_message() + " at " 
+            + compilation_result.start_row + ":" + compilation_result.start_column
+            + " - " + compilation_result.end_row + ":" + compilation_result.end_column);
         runBtn.disabled = false;
         return;
       }

@@ -1,9 +1,10 @@
-use crate::{utils::message::LinearCompilationMessage, Compiler};
+use crate::{Compiler};
+//use crate:utils::message::LinearCompilationMessage;
 
 impl Compiler {
-    pub fn linear_compile_code(&mut self, source : &str) -> LinearCompilationMessage {
-        self.linear_compile(source)
-    }
+    // pub fn linear_compile_code(&mut self, source : &str) -> LinearCompilationMessage {
+    //     self.linear_compile(source)
+    // }
 }
 
 #[cfg(test)]

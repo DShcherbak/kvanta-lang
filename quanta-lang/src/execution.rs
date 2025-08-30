@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::{Arc, Mutex}};
 
 use gloo_timers::future::TimeoutFuture;
-use quanta_parser::{ast::{AstBlock, AstNode, AstProgram, BaseValue, Expression, Operator, Type, UnaryOperator, VariableCall}, error::Error};
+use quanta_parser::{ast::{AstBlock, AstNode, AstProgram, AstStatement, BaseValue, BaseValueType, Coords, Expression, ExpressionType, Operator, Type, UnaryOperator, VariableCall}, error::Error};
 use quanta_parser::ast::BaseType;
 use crate::utils::canvas::Canvas;
 use js_sys::Math;
@@ -73,31 +73,30 @@ fn color_to_str(r: &u8, g : &u8, b: &u8) -> String {
 }
 
 macro_rules! expect_arg {
-    // Варіант із полями: BaseValue::Variant(pats...)
+    // Варіант із полями: BaseValueType::Variant(pats...)
     ($fname:expr, $vals:expr, $idx:expr, $Variant:ident ( $($pat:pat),* ) => $build:expr) => {{
         let __arg_index = $idx; // збережемо, щоб не обчислювати двічі
         match &$vals[__arg_index] {
-            BaseValue::$Variant($($pat),*) => { $build }
+            BaseValue{val: BaseValueType::$Variant($($pat),*), coords: _} => { $build }
             other => {
-                return Err(Error::RuntimeError {
-                    message: format!(
+                return Err(Error::runtime(
+                        format!(
                         "{}: arg #{}: Expected argument type {} but got {}",
                         $fname,
                         __arg_index,            
                         stringify!($Variant),
                         other.get_type(&|_| Some(Type::typ(BaseType::Int)))?.to_string()
-                    ).into(),
-                });
+                    ), other.coords));
             }
         }
     }};
 }
 
 fn update_array(name: String, array: &mut BaseValue, mut integer_indices: Vec<i32>, val: BaseValue) -> Result<(), Error> {
-        if let BaseValue::Array(elems) = array {
+        if let BaseValueType::Array(elems) = &mut array.val {
             let index = integer_indices.remove(0);
             if index < 0 || index as usize >= elems.len() {
-                return Err(Error::RuntimeError { message: format!("Index out of bounds for array {}: {}", name, index).into() });
+                return Err(Error::runtime(format!("Index out of bounds for array {}: {}", name, index), array.coords));
             }
             if integer_indices.len() == 0 {
                 elems[index as usize] = val;
@@ -105,9 +104,21 @@ fn update_array(name: String, array: &mut BaseValue, mut integer_indices: Vec<i3
             }
             return update_array(format!("{}[{}]", name, index), elems.get_mut(index as usize).unwrap(), integer_indices, val);
         } else {
-            return Err(Error::RuntimeError { message: format!("Variable {} is not an array", name).into() });
+            return Err(Error::runtime(format!("Variable {} is not an array", name), array.coords));
         }
     }
+
+fn int(i: i32, coords:Coords) -> BaseValue {
+    BaseValue{ val:BaseValueType::Int(i), coords} 
+}
+
+fn flt(i: f32, coords:Coords) -> BaseValue {
+    BaseValue{ val:BaseValueType::Float(i), coords} 
+}
+
+fn bol(i: bool, coords:Coords) -> BaseValue {
+    BaseValue{ val:BaseValueType::Bool(i), coords} 
+}
 
 impl Execution {
 
@@ -156,42 +167,42 @@ impl Execution {
         self.global_vars.lock().unwrap().get(name).map(|x| x.clone())
     }
 
-    async fn get_variable(&mut self, var: &VariableCall) -> Result<BaseValue, Error> {
+    async fn get_variable(&mut self, var: &VariableCall, coords: Coords) -> Result<BaseValue, Error> {
         match var {
-            VariableCall::Name(name) => self.get(name).ok_or(Error::RuntimeError { message: format!("Unknown variable: {}", name).into() }),
+            VariableCall::Name(name) => self.get(name).ok_or(Error::runtime(format!("Unknown variable: {}", name), coords)),
             VariableCall::ArrayCall(name, indices) => {
                 if !self.contains_key(name) {
-                    return Err(Error::RuntimeError { message: format!("Unknown array 1: {}, variables: {:?}", name, self.scope).into() });
+                    return Err(Error::runtime(format!("Unknown array 1: {}, variables: {:?}", name, self.scope), coords));
                 }
                 if indices.is_empty() {
-                    return Err(Error::RuntimeError { message: "Empty index".into() });
+                    return Err(Error::runtime(String::from("Empty index"), coords));
                 }
                 let mut integer_indices: Vec<i32> = vec![];
                 for index in indices {
-                    match self.calculate_expression(index.clone().to_expr()).await {
-                        Ok(BaseValue::Int(i)) => {
+                    match self.calculate_expression(index.clone().to_expr()).await?.val {
+                        BaseValueType::Int(i) => {
                             if i < 0 {
-                                return Err(Error::RuntimeError { message: format!("Negative index for array {}: {}", name, i).into() });
+                                return Err(Error::runtime(format!("Negative index for array {}: {}", name, i), coords));
                             }
                             integer_indices.push(i);
                         },
-                        _ => return Err(Error::RuntimeError { message: "Array indices must be integers".into() }),
+                        _ => return Err(Error::runtime(String::from("Array indices must be integers"), coords)),
                     }
                 }
                 let maybe_array = self.get(name);
                 if maybe_array.is_none() {
-                    return Err(Error::RuntimeError { message: format!("Unknown array: {} ", name).into() });
+                    return Err(Error::runtime(format!("Unknown array: {} ", name), coords));
                 }
                 let mut array = maybe_array.unwrap();
                 while integer_indices.len() > 0 {
-                    if let BaseValue::Array(elems) = array {
+                    if let BaseValueType::Array(elems) = array.val {
                         let index = integer_indices.remove(0);
                         if index < 0 || index as usize >= elems.len() {
-                            return Err(Error::RuntimeError { message: format!("Index out of bounds for array {}: {}", name, index).into() });
+                            return Err(Error::runtime(format!("Index out of bounds for array {}: {}", name, index), coords));
                         }
                         array = elems.get(index as usize).unwrap().clone();
                     } else {
-                        return Err(Error::RuntimeError { message: format!("Variable {} is not an array", name).into() });
+                        return Err(Error::runtime(format!("Variable {} is not an array", name), coords));
                     }
                 }
                 Ok(array)
@@ -201,44 +212,44 @@ impl Execution {
 
     
 
-    async fn set_variable(&mut self, var: &VariableCall, val: BaseValue) -> Result<(), Error> {
+    async fn set_variable(&mut self, var: &VariableCall, val: BaseValue, coords: Coords) -> Result<(), Error> {
         match var {
-            VariableCall::Name(name) => if self.set(name.clone(), val) { return Ok(()); } else { return Err(Error::RuntimeError { message: format!("Unknown variable: {}", name).into() });},
+            VariableCall::Name(name) => if self.set(name.clone(), val) { return Ok(()); } else { return Err(Error::runtime(format!("Unknown variable: {}", name), coords));},
             VariableCall::ArrayCall(name, indices) => {
                 if !self.contains_key(name) {
-                    return Err(Error::RuntimeError { message: format!("Unknown array 1: {}, variables: {:?}", name, self.scope).into() });
+                    return Err(Error::runtime(format!("Unknown array 1: {}, variables: {:?}", name, self.scope), coords));
                 }
                 if indices.is_empty() {
-                    return Err(Error::RuntimeError { message: "Empty index".into() });
+                    return Err(Error::runtime(String::from("Empty index"), coords));
                 }
                 let mut integer_indices: Vec<i32> = vec![];
                 for index in indices {
-                    match self.calculate_expression(index.clone().to_expr()).await {
-                        Ok(BaseValue::Int(i)) => {
+                    match self.calculate_expression(index.clone().to_expr()).await?.val {
+                        BaseValueType::Int(i) => {
                             if i < 0 {
-                                return Err(Error::RuntimeError { message: format!("Negative index for array {}: {}", name, i).into() });
+                                return Err(Error::runtime(format!("Negative index for array {}: {}", name, i), coords));
                             }
                             integer_indices.push(i);
                         },
-                        _ => return Err(Error::RuntimeError { message: "Array indices must be integers".into() }),
+                        _ => return Err(Error::runtime(String::from("Array indices must be integers"), coords)),
                     }
                 }
                 let maybe_array = self.get(name);
                 if maybe_array.is_none() {
-                    return Err(Error::RuntimeError { message: format!("Unknown array: {} ", name).into() });
+                    return Err(Error::runtime(format!("Unknown array: {} ", name), coords));
                 }
                 let mut array = maybe_array.unwrap();
                 update_array(name.clone(), &mut array, integer_indices, val)?;
                 if self.set(name.clone(), array) { 
                     Ok(()) 
                 } else { 
-                    Err(Error::RuntimeError { message: format!("Unknown variable: {}", name).into() })
+                    Err(Error::runtime(format!("Unknown variable: {}", name), coords))
                 }
             }
         }
     }
 
-    async fn execute_function(&mut self, function_name: &str, args: Vec<Expression>) -> Result<Option<BaseValue>, Error>{
+    async fn execute_function(&mut self, function_name: &str, args: Vec<Expression>, coords: Coords) -> Result<Option<BaseValue>, Error>{
         let mut vals : Vec<BaseValue> = vec![];
         for arg in args {
             let val = self.calculate_expression(arg).await?;
@@ -274,10 +285,10 @@ impl Execution {
             "polygon" => {
                 let mut nums = String::new();
                 for val in &vals {
-                    if let BaseValue::Int(num) = val {
+                    if let BaseValueType::Int(num) = val.val {
                         nums.push_str(&format!("{} ", num));
                     } else {
-                        return Err(Error::RuntimeError { message: "Incorrect arguments for polygon function!".into() });
+                        return Err(Error::runtime(String::from("Incorrect arguments for polygon function!"), val.coords));
                     }
                 }
                 self.canvas.add_command(format!("polygon {} fill={} stroke={} width={}", nums.trim(), self.figure_color.lock().unwrap(), self.line_color.lock().unwrap(), self.line_width.lock().unwrap()));
@@ -294,12 +305,12 @@ impl Execution {
                 Ok(None)
             },
             "setLineColor" => {
-                if let BaseValue::Color(r,g,b) = &vals[0] {
+                if let BaseValueType::Color(r,g,b) = &vals[0].val {
                     let mut inner  = self.line_color.lock().unwrap();
                     *inner = color_to_str(r, g, b);
                     Ok(None)
                 }
-                else if let BaseValue::RandomColor = &vals[0] {
+                else if let BaseValueType::RandomColor = &vals[0].val {
                     let r = (255.0 * Math::random()) as u8;
                     let g = (255.0 * Math::random()) as u8;
                     let b = (255.0 * Math::random()) as u8;
@@ -308,16 +319,16 @@ impl Execution {
                     Ok(None)
                 }
                 else {
-                    Err(Error::RuntimeError { message: format!("Incorrect arguments for setLineColor function: expected a color, got {:?}!", &vals[0]).into() })
+                    Err(Error::runtime(format!("Incorrect arguments for setLineColor function: expected a color, got {:?}!", &vals[0]), coords))
                 }
             },
             "setFigureColor" => {
-                if let BaseValue::Color(r,g,b) = &vals[0] {
+                if let BaseValueType::Color(r,g,b) = &vals[0].val {
                     let mut inner  = self.figure_color.lock().unwrap();
                     *inner = color_to_str(r, g, b);
                     Ok(None)
                 }
-                else if let BaseValue::RandomColor = &vals[0] {
+                else if let BaseValueType::RandomColor = &vals[0].val {
                     let r = (255.0 * Math::random()) as u8;
                     let g = (255.0 * Math::random()) as u8;
                     let b = (255.0 * Math::random()) as u8;
@@ -326,7 +337,7 @@ impl Execution {
                     Ok(None)
                 }
                 else {
-                    Err(Error::RuntimeError { message: format!("Incorrect arguments for setFigureColor function: expected a color, got {:?}!", &vals[0]).into() })
+                    Err(Error::runtime(format!("Incorrect arguments for setFigureColor function: expected a color, got {:?}!", &vals[0]), coords))
                 }
             },
             "setLineWidth" => {
@@ -336,7 +347,7 @@ impl Execution {
                     *inner = width;
                     Ok(None)
                 } else {
-                    Err(Error::RuntimeError { message: "Line width can't be negative!".into() })
+                    Err(Error::runtime(String::from("Line width can't be negative!"), coords))
                 }
             },
             "sleep" => {
@@ -347,7 +358,7 @@ impl Execution {
 
                     Ok(None)
                 } else {
-                    Err(Error::RuntimeError { message: "Sleep time can't be negative!".into() })
+                    Err(Error::runtime(String::from("Sleep time can't be negative!"), coords))
                 }
             },
             "animate" => {
@@ -366,7 +377,7 @@ impl Execution {
                 if self.functions.contains_key(name) {
                     let (params, _, body) = self.functions.get(name).unwrap();
                     if params.len() != vals.len() {
-                        return Err(Error::RuntimeError { message: format!("Function {} expects {} arguments, but got {}", name, params.len(), vals.len()).into() });
+                        return Err(Error::runtime(format!("Function {} expects {} arguments, but got {}", name, params.len(), vals.len()), coords));
                     }
                     let mut new_exec = self.create_subfunction();
                     for (i, param) in params.iter().enumerate() {
@@ -379,28 +390,28 @@ impl Execution {
                     }
                     return Ok(None);
                 }
-                Err(Error::RuntimeError { message: format!("Unknown function: {}", function_name).into() })
+                Err(Error::runtime(format!("Unknown function: {}", function_name), coords))
             }
         }
     }
 
-    async fn execute_init(&mut self, var: String, expr: Expression) -> Result<(), Error>{
+    async fn execute_init(&mut self, var: String, expr: Expression, coords: Coords) -> Result<(), Error>{
         let value = self.calculate_expression(expr).await?;
 
         if let Some(_) = self.get(&var) {
-            return Err(Error::RuntimeError { message: format!("Variable {} is already defined!", &var).into() });
+            return Err(Error::runtime(format!("Variable {} is already defined!", &var), coords));
         }
         self.scope.lock().unwrap().variables.insert(var, value);
         Ok(())
     }
 
-    async fn execute_set(&mut self, var: &VariableCall, expr: Expression) -> Result<(), Error> {
+    async fn execute_set(&mut self, var: &VariableCall, expr: Expression, coords: Coords) -> Result<(), Error> {
         let value = self.calculate_expression(expr).await?;
-        if self.get_variable(var).await.is_ok() {
-            self.set_variable(var, value).await?;
+        if self.get_variable(var, coords).await.is_ok() {
+            self.set_variable(var, value, coords).await?;
             return Ok(())
         }
-        Err(Error::RuntimeError { message: "Couldn't set new value".into() })
+        Err(Error::runtime(String::from("Couldn't set new value"), coords))
     }
 
     pub async fn execute(&mut self) -> Result<(), Error> {
@@ -417,7 +428,7 @@ impl Execution {
                         self.canvas.add_command("end".into());
                     }
                 }
-                return Err(Error::RuntimeError { message: "No main function found".into() });
+                return Err(Error::runtime(String::from("No main function found"), (0,0,0,0)));
             },
         }
         Ok(())
@@ -430,7 +441,9 @@ impl Execution {
                 for func in &funcs.0 {
                     if func.name == "keyboard" {
                         let mut new_exec = self.create_subscope();
-                        new_exec.execute_init(func.args.get(0).unwrap().0.clone(), Expression::Value(BaseValue::Int(key))).await?;
+                        new_exec.execute_init(func.args.get(0).unwrap().0.clone(), 
+                        Expression{expr_type: ExpressionType::Value(
+                                    BaseValue{val: BaseValueType::Int(key), coords: func.header}), coords:func.header}, func.header).await?;
                         new_exec.execute_commands(func.block.nodes.clone()).await?;
                     }
                 }
@@ -446,8 +459,12 @@ impl Execution {
                 for func in &funcs.0 {
                     if func.name == "mouse" {
                         let mut new_exec = self.create_subscope();
-                        new_exec.execute_init(func.args.get(0).unwrap().0.clone(), Expression::Value(BaseValue::Int(x))).await?;
-                        new_exec.execute_init(func.args.get(1).unwrap().0.clone(), Expression::Value(BaseValue::Int(y))).await?;
+                        new_exec.execute_init(func.args.get(0).unwrap().0.clone(), 
+                        Expression{expr_type: ExpressionType::Value(
+                                    BaseValue{val: BaseValueType::Int(x), coords: func.header}), coords:func.header}, func.header).await?;
+                        new_exec.execute_init(func.args.get(1).unwrap().0.clone(), 
+                        Expression{expr_type: ExpressionType::Value(
+                                    BaseValue{val: BaseValueType::Int(y), coords: func.header}), coords:func.header}, func.header).await?;
                         new_exec.execute_commands(func.block.nodes.clone()).await?;
                     }
                 }
@@ -460,19 +477,19 @@ impl Execution {
         Box::pin(async move {
             TimeoutFuture::new(1).await;
             for line in nodes {
-                match line {
-                    AstNode::Command { name, args } => {
-                        self.execute_function(&name, args).await?;
+                match line.statement {
+                    AstStatement::Command { name, args } => {
+                        self.execute_function(&name, args, line.coords).await?;
                     },
-                    AstNode::Init { typ : _, val, expr } => {
-                        self.execute_init(val, expr).await?;
+                    AstStatement::Init { typ : _, val, expr } => {
+                        self.execute_init(val, expr, line.coords).await?;
                     }
-                    AstNode::SetVal { val, expr } => {
-                        self.execute_set(&val, expr).await?;
+                    AstStatement::SetVal { val, expr } => {
+                        self.execute_set(&val, expr, line.coords).await?;
                     }
                     
-                    AstNode::If { clause, block, else_block } => {
-                        if let BaseValue::Bool(val) = self.calculate_expression(clause).await? {
+                    AstStatement::If { clause, block, else_block } => {
+                        if let BaseValueType::Bool(val) = self.calculate_expression(clause).await?.val {
                             let mut new_exec = self.create_subscope();
                             if val {
                                 if let Some(return_value) = new_exec.execute_commands(block.nodes).await? {
@@ -484,14 +501,13 @@ impl Execution {
                                 }
                             }
                         } else {
-                            return Err(Error::RuntimeError { message: "If clause must be a boolean expression".into() });
+                            return Err(Error::runtime(String::from("If clause must be a boolean expression"), line.coords));
                         }
                     },
-                    AstNode::While { clause, block } => {
+                    AstStatement::While { clause, block } => {
                         loop {
-                            let val = self.calculate_expression(clause.clone()).await;
-                            match val {
-                                Ok(BaseValue::Bool(while_clause)) => {
+                            match self.calculate_expression(clause.clone()).await?.val {
+                                BaseValueType::Bool(while_clause) => {
                                     if while_clause {
                                         let mut new_exec = self.create_subscope();
                                         let result = new_exec.execute_commands(block.nodes.clone()).await?;
@@ -501,17 +517,14 @@ impl Execution {
                                     } else {
                                         break;
                                     }
-                                }
-                                Err(err) => {
-                                    return Err(err);
-                                }
-                                Ok(v) => return Err(Error::RuntimeError { message: format!("Expected a boolean value, but got {:?}", v).into() })
+                                },
+                                v => return Err(Error::runtime(format!("Expected bool value but got: {:?}", v), line.coords))
                             }
                         }
                     },
-                    AstNode::For { val, from, to, block } => {
-                        if let BaseValue::Int(f_) = from {
-                            if let BaseValue::Int(t_) = to {
+                    AstStatement::For { val, from, to, block } => {
+                        if let BaseValueType::Int(f_) = from.val {
+                            if let BaseValueType::Int(t_) = to.val {
                                 let (f,t) = {
                                     if f_ <= t_ {
                                         (f_, t_)
@@ -520,14 +533,14 @@ impl Execution {
                                     }
                                 };
                                 for cycle in f..=t {
-                                    if let Some(return_value) = self.execute_for(val.clone(), cycle, block.clone()).await?{
+                                    if let Some(return_value) = self.execute_for(val.clone(), cycle, block.clone(), line.coords).await?{
                                         return Ok(Some(return_value));
                                     }
                                 }                    
                             }
                         }
                     },
-                    AstNode::Return { expr } => {
+                    AstStatement::Return { expr } => {
                         let val = self.calculate_expression(expr).await?;
                         return Ok(Some(val.clone()))
                     },
@@ -537,9 +550,11 @@ impl Execution {
         })
     }
 
-    async fn execute_for(&mut self, val: String, cycle : i32, block : AstBlock) -> Result<Option<BaseValue>, Error> {
+    async fn execute_for(&mut self, val: String, cycle : i32, block : AstBlock, coords: Coords) -> Result<Option<BaseValue>, Error> {
         let mut new_exec = self.create_subscope();
-        new_exec.execute_init(val, Expression::Value(BaseValue::Int(cycle))).await?;
+        new_exec.execute_init(val, 
+                        Expression{expr_type: ExpressionType::Value(
+                                    BaseValue{val: BaseValueType::Int(cycle), coords}), coords}, coords).await?;
         let result = new_exec.execute_commands(block.nodes.clone()).await;
         result
     }
@@ -550,14 +565,15 @@ impl Execution {
         &'a mut self,
         expr: Expression,
     ) -> Pin<Box<dyn Future<Output = Result<BaseValue, Error>> + 'a>> {
+        
         Box::pin(async move {
-            match expr {
-                Expression::Value(base_value) => {
-                    match base_value {
-                        BaseValue::Id(var) => {
-                            self.get_variable(&var).await
+            match expr.expr_type {
+                ExpressionType::Value(base_value) => {
+                    match base_value.val {
+                        BaseValueType::Id(var) => {
+                            self.get_variable(&var, expr.coords).await
                         },
-                        BaseValue::FunctionCall(name, exprs, _ ) => {
+                        BaseValueType::FunctionCall(name, exprs, _ ) => {
                             let mut vals = vec![];
                             for expr in exprs {
                                 let val = self.calculate_expression(expr).await?;
@@ -569,70 +585,70 @@ impl Execution {
                                     if i < vals.len() {
                                         new_exec.scope.lock().unwrap().variables.insert(name.clone(), vals[i].clone());
                                     } else {
-                                        return Err(Error::RuntimeError { message: format!("Function {} expects {} arguments, but got {}", name, params.len(), vals.len()).into() });
+                                        return Err(Error::runtime(format!("Function {} expects {} arguments, but got {}", name, params.len(), vals.len()), expr.coords));
                                     }
                                 }
                                 let result = new_exec.execute_commands(body.nodes.clone()).await?;
                                 if let Some(return_value) = result {
                                     return Ok(return_value);
                                 }
-                                return Err(Error::RuntimeError { message: format!("Function {} didn't return a value", name).into() });
+                                return Err(Error::runtime(format!("Function {} didn't return a value", name), expr.coords));
                             }
-                            Err(Error::RuntimeError { message: format!("Unknown function: {}", name).into() })
+                            Err(Error::runtime(format!("Unknown function: {}", name), expr.coords))
                         }
-                        x => Ok(x)
+                        x => Ok(BaseValue { val: x, coords: base_value.coords })
                     }
                 },
-                Expression::Unary(op, inner) => {
+                ExpressionType::Unary(op, inner) => {
                     let inner_val = self.calculate_expression(*inner).await?;
                     match op {
                         UnaryOperator::UnaryMinus => {
-                            match inner_val {
-                                BaseValue::Int(num) => Ok(BaseValue::Int((-1) * num)),
-                                BaseValue::Float(num) => Ok(BaseValue::Float((-1.0) * num)),
-                                v => Err(Error::RuntimeError { message: format!("Cannot apply unary minus to: {:?}", v).into() })
+                            match inner_val.val {
+                                BaseValueType::Int(num) => Ok(int((-1) * num, inner_val.coords)),
+                                BaseValueType::Float(num) => Ok(flt((-1.0) * num, inner_val.coords)),
+                                v => Err(Error::runtime(format!("Cannot apply unary minus to: {:?}", v), inner_val.coords))
                             }
                         },
                         UnaryOperator::NOT => {
-                            match inner_val {
-                                BaseValue::Bool(val) => Ok(BaseValue::Bool(!val)),
-                                _ => Err(Error::RuntimeError { message: "Unary not only allowed on bool: {}".into() })
+                            match inner_val.val {
+                                BaseValueType::Bool(val) => Ok(bol(!val, inner_val.coords)),
+                                _ => Err(Error::runtime(String::from("Unary not only allowed on bool: {}"), inner_val.coords))
                             }
                         }
                         UnaryOperator::Parentheses => Ok(inner_val)
                     }
                 },
-                Expression::Binary(op, lhs, rhs) => {
+                ExpressionType::Binary(op, lhs, rhs) => {
                     let left_val = self.calculate_expression(*lhs).await?;
                     let right_val = self.calculate_expression(*rhs).await?;
 
-                    if let BaseValue::Int(x) = left_val {
-                        if let BaseValue::Int(y) = right_val {
-                            return compare_ints(x, y, op);
+                    if let BaseValueType::Int(x) = left_val.val {
+                        if let BaseValueType::Int(y) = right_val.val {
+                            return compare_ints(x, y, op, expr.coords);
                         }
-                        if let BaseValue::Float(y) = right_val {
+                        if let BaseValueType::Float(y) = right_val.val {
                             let t = x as f32;
-                            return compare_floats(t, y, op);
+                            return compare_floats(t, y, op, expr.coords);
                         }
                     }
 
-                    if let BaseValue::Float(y) = left_val {
-                        if let BaseValue::Int(x) = right_val {
+                    if let BaseValueType::Float(y) = left_val.val {
+                        if let BaseValueType::Int(x) = right_val.val {
                             let t = x as f32;
-                            return compare_floats(y, t, op);
+                            return compare_floats(y, t, op, expr.coords);
                         }
-                        if let BaseValue::Float(x) = right_val {
-                            return compare_floats(y, x, op);
-                        }
-                    }
-
-                    if let BaseValue::Bool(a) = left_val {
-                        if let BaseValue::Bool(b) = right_val {
-                            return compare_bools(a, b, op);
+                        if let BaseValueType::Float(x) = right_val.val {
+                            return compare_floats(y, x, op, expr.coords);
                         }
                     }
 
-                    Err(Error::RuntimeError { message: "Unsolvable expression!".into() })
+                    if let BaseValueType::Bool(a) = left_val.val {
+                        if let BaseValueType::Bool(b) = right_val.val {
+                            return compare_bools(a, b, op, expr.coords);
+                        }
+                    }
+
+                    Err(Error::runtime(String::from("Unsolvable expression!"), expr.coords))
                 },
             }
         })
@@ -640,56 +656,56 @@ impl Execution {
 }
 
 
-fn compare_ints(x: i32, y : i32, op: Operator) -> Result<BaseValue, Error> {
+fn compare_ints(x: i32, y : i32, op: Operator, coords: Coords) -> Result<BaseValue, Error> {
     match op {
 
-        Operator::EQ => return Ok(BaseValue::Bool(x == y)),
-        Operator::NQ => return Ok(BaseValue::Bool(x != y)),
-        Operator::GT => return Ok(BaseValue::Bool(x > y)),
-        Operator::LT => return Ok(BaseValue::Bool(x < y)),
-        Operator::GQ => return Ok(BaseValue::Bool(x >= y)),
-        Operator::LQ => return Ok(BaseValue::Bool(x <= y)),
+        Operator::EQ => return Ok(bol(x == y, coords)),
+        Operator::NQ => return Ok(bol(x != y, coords)),
+        Operator::GT => return Ok(bol(x > y, coords)),
+        Operator::LT => return Ok(bol(x < y, coords)),
+        Operator::GQ => return Ok(bol(x >= y, coords)),
+        Operator::LQ => return Ok(bol(x <= y, coords)),
         
-        Operator::Plus => Ok(BaseValue::Int(x + y)),
-        Operator::Minus => Ok(BaseValue::Int(x - y)),
-        Operator::Mult => Ok(BaseValue::Int(x * y)),
-        Operator::Div => Ok(BaseValue::Int(x / y)),
-        Operator::Mod => Ok(BaseValue::Int(x % y)),
-        v => return Err(Error::RuntimeError { message: format!("Cannot apply operator {:?} to values of type int!",v).into()})
+        Operator::Plus => Ok(int(x + y, coords)),
+        Operator::Minus => Ok(int(x - y, coords)),
+        Operator::Mult => Ok(int(x * y, coords)),
+        Operator::Div => Ok(int(x / y, coords)),
+        Operator::Mod => Ok(int(x % y, coords)),
+        v => Err(Error::runtime(format!("Cannot apply operator {:?} to values of type int!",v), coords))   
     }
 }
 
-fn compare_floats(x: f32, y : f32, op: Operator) -> Result<BaseValue, Error> {
+fn compare_floats(x: f32, y : f32, op: Operator, coords: Coords) -> Result<BaseValue, Error> {
     match op {
 
-        Operator::EQ => Ok(BaseValue::Bool(x == y)),
-        Operator::NQ => Ok(BaseValue::Bool(x != y)),
-        Operator::GT => Ok(BaseValue::Bool(x > y)),
-        Operator::LT => Ok(BaseValue::Bool(x < y)),
-        Operator::GQ => Ok(BaseValue::Bool(x >= y)),
-        Operator::LQ => Ok(BaseValue::Bool(x <= y)),
+        Operator::EQ => Ok(bol(x == y, coords)),
+        Operator::NQ => Ok(bol(x != y, coords)),
+        Operator::GT => Ok(bol(x > y, coords)),
+        Operator::LT => Ok(bol(x < y, coords)),
+        Operator::GQ => Ok(bol(x >= y, coords)),
+        Operator::LQ => Ok(bol(x <= y, coords)),
         
-        Operator::Plus => Ok(BaseValue::Float(x + y)),
-        Operator::Minus => Ok(BaseValue::Float(x - y)),
-        Operator::Mult => Ok(BaseValue::Float(x * y)),
-        Operator::Div => Ok(BaseValue::Float(x / y)),
-        Operator::Mod => Ok(BaseValue::Float(x % y)),
+        Operator::Plus => Ok(flt(x + y, coords)),
+        Operator::Minus => Ok(flt(x - y, coords)),
+        Operator::Mult => Ok(flt(x * y, coords)),
+        Operator::Div => Ok(flt(x / y, coords)),
+        Operator::Mod => Ok(flt(x % y, coords)),
 
-        v => return Err(Error::RuntimeError { message: format!("Cannot apply operator {:?} to values of type float!",v).into()})
+        v => Err(Error::runtime(format!("Cannot apply operator {:?} to values of type float!",v), coords))
 
     }
 }
 
-fn compare_bools(a: bool, b : bool, op: Operator) -> Result<BaseValue, Error> {
+fn compare_bools(a: bool, b : bool, op: Operator, coords: Coords) -> Result<BaseValue, Error> {
     match op {
 
-        Operator::EQ => Ok(BaseValue::Bool(a == b)),
-        Operator::NQ => Ok(BaseValue::Bool(a != b)),
+        Operator::EQ => Ok(bol(a == b, coords)),
+        Operator::NQ => Ok(bol(a != b, coords)),
         
-        Operator::AND => Ok(BaseValue::Bool(a && b)),
-        Operator::OR => Ok(BaseValue::Bool(a || b)),
+        Operator::AND => Ok(bol(a && b, coords)),
+        Operator::OR => Ok(bol(a || b, coords)),
 
-        o => Err(Error::RuntimeError { message: format!("Cannot apply operator '{:?}' to values of type bool!", o).into() })
+        o => Err(Error::runtime(format!("Cannot apply operator '{:?}' to values of type bool!", o), coords))
     }
 }
 
