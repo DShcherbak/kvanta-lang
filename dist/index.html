@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quanta – Mini IDE</title>
+  <style>
+    :root {
+      --border: #e5e7eb;
+      --bg: #0b1020;
+      --panel: #0f172a;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #22d3ee;
+    }
+    html, body { height: 100%; margin: 0; }
+    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji"; background: var(--bg); color: var(--text); }
+
+    .app {
+      height: 100%;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      grid-template-rows: auto 1fr;
+    }
+
+    .toolbar {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 12px; border-bottom: 1px solid var(--border); background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(6px);
+    }
+    .toolbar h1 { font-size: 16px; font-weight: 600; margin: 0; color: var(--muted); }
+    .spacer { flex: 1; }
+    button {
+      appearance: none; border: 1px solid transparent; border-radius: 999px;
+      padding: 8px 14px; font-weight: 600; cursor: pointer;
+      background: var(--accent); color: #0b1020;
+      box-shadow: 0 10px 18px rgba(34, 211, 238, 0.25);
+    }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .panes {
+  display: grid;
+  grid-template-columns: 1fr 4px 1fr; /* default: side-by-side with resizer */
+  height: 100%;
+}
+    .pane {
+      position: relative; height: 100%; width: 100%;
+      border-right: 1px solid var(--border);
+    }
+    .pane:last-child { border-right: 0; overflow: hidden;}
+    .pane__header {
+      position: absolute; top: 8px; right: 12px; z-index: 3;
+      font-size: 12px; color: var(--muted);
+      background: rgba(2,6,23,0.35); padding: 4px 8px; border-radius: 999px; border: 1px solid rgba(226,232,240,0.1);
+    }
+
+    /* Output box */
+    #output {
+      position: absolute; inset: 0; padding: 12px 14px 14px 14px; overflow: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      white-space: pre-wrap; word-break: break-word;
+      background: var(--panel);
+    }
+
+    /* CodeMirror container fills the pane */
+    #editor { position: absolute;
+  top: 0; bottom: 0; left: 0; right: 0;
+  overflow: auto;  }
+
+    /* Small screens: stack panes */
+    @media (max-width: 900px) {
+  .panes {
+    flex-direction: column;
+    grid-template-columns: 1fr;       /* stack vertically */
+    grid-template-rows: auto auto;    /* one row per pane */
+  }
+
+  .resizer {
+    display: none;
+  }
+
+  .pane {
+    min-width: 0;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .pane:last-child {
+    border-bottom: none;
+  }
+
+  .editor {
+    display: flex;
+    flex-grow: 1; /* Allows the editor to fill remaining space */
+      overflow-y: auto; /* This is the key change to enable scrolling */
+  }
+}
+
+    .resizer {
+      background: var(--border);
+      cursor: col-resize;
+      width: 4px;
+      height: 100%;
+    }
+    /* Canvas + logs layout in right pane */
+    .resultWrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  padding: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+}
+
+    /* .canvasContainer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+} */
+
+.canvasContainer {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+
+.canvas {
+  width: 100%;
+  height: auto;
+  max-width: 1000px;
+  max-height: 100%;
+  aspect-ratio: 1 / 1;
+  background: #0a0f1f;
+  display: block;
+  object-fit: contain;
+  border: 1px solid rgba(255, 255, 255);
+}
+/* 
+
+.canvas {
+  width: 100%;
+  max-width: 1000px;
+  aspect-ratio: 1 / 1;
+  background: #0a0f1f;
+  display: block;
+  height: auto;
+  object-fit: contain;
+} */
+
+    #logs { 
+    width: 100%; 
+    max-width: 1000px; 
+    height: 160px; 
+    box-sizing: border-box; 
+    }
+
+    </style>
+  <script type="module" crossorigin src="/Quanta/assets/index-Ci6WMm4Z.js"></script>
+</head>
+<body>
+  <div class="app">
+    <div class="toolbar">
+      <strong>Quanta</strong>
+      <div class="spacer"></div>
+      <button id="runBtn">Run (Ctrl/Cmd+Enter)</button>
+    </div>
+    <div class="panes">
+      <div class="pane">
+        <div class="pane__header">Source</div>
+        <div id="editor"></div>
+      </div>
+      <div class="resizer" id="resizer" aria-hidden="true"></div>
+      <div class="pane">
+        <div class="pane__header">Result</div>
+        <div class="resultWrap">
+          <div class="canvasContainer">
+            <canvas id="canvas" class="canvas" width="1000" height="1000" tabindex="0"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

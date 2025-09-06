@@ -1,0 +1,36 @@
+// Lezer grammar for Quanta-like language based on provided Pest grammar
+// File extension: .grammar
+
+@top document { words }
+
+words {
+  word*
+}
+
+word {
+  keyword | control | operator | identifier | integer | decimal
+  @precedence { keyword, control, identifier }
+}
+
+keyword {
+  "func" | "global" | "return"
+}
+
+control {
+  "if" | "for" | "else" | "while"
+}
+
+operator {
+  "+" | "-" | "*" | "/" | "&&" | "||" 
+}
+
+@tokens {
+  integer { $[0-9]+ }
+  decimal { $[0-9]+ "." $[0-9]* }
+  identifier { $[a-zA-Z] ($[a-zA-Z0-9] | "_")* }
+
+  WHITESPACE { " " | "\t" | "\n" | "\r" | "{" | "}" }
+  @precedence { decimal, integer }
+}
+
+@skip { WHITESPACE  }
