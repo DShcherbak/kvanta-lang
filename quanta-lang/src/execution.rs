@@ -98,7 +98,10 @@ macro_rules! expect_arg {
                         $fname,
                         __arg_index,            
                         stringify!($Variant),
-                        other.get_type(&|_| Some(Type::typ(BaseType::Int)))?.to_string()
+                        match other.get_type() {
+                            Ok(t) => t.to_string(),
+                            Err(str) => str
+                        },
                     ), other.coords));
             }
         }
@@ -628,7 +631,7 @@ impl Execution {
                         BaseValueType::Id(var) => {
                             self.get_variable(&var, expr.coords).await
                         },
-                        BaseValueType::FunctionCall(name, exprs, _ ) => {
+                        BaseValueType::FunctionCall(name, exprs) => {
                            let mut vals = vec![];
                             for expr in exprs {
                                 let c = expr.coords;

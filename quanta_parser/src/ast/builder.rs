@@ -470,8 +470,8 @@ fn build_ast_from_value(&self, val: Pair<Rule>) -> Result<BaseValue, Error> {
             let name = self.build_ast_from_ident(iter.next().unwrap())?;
             let args = self.build_ast_from_arglist(iter)?;
             if let Some((_, return_type)) = self.function_signatures.get(&name) {
-                if let Some(typ) = return_type {
-                    Ok(BaseValueType::FunctionCall(name, args, typ.clone()))
+                if let Some(_) = return_type {
+                    Ok(BaseValueType::FunctionCall(name, args))
                 } else {
                     Err(Error::type_er(format!("Function {} has no return type", name), coords))
                 }
@@ -503,7 +503,7 @@ fn build_ast_from_color(&self, val: Pair<Rule>) -> Result<BaseValue, Error> {
         "Color::Cyan" => Ok(BaseValueType::Color(59,168,231)),
         "Color::Black" => Ok(BaseValueType::Color(0, 0, 0)),
         "Color::White" => Ok(BaseValueType::Color(255, 255, 255)),
-        "Color::Random" => Ok(BaseValueType::FunctionCall(String::from("Color::Random"), vec![], Type::typ(BaseType::Color))),
+        "Color::Random" => Ok(BaseValueType::FunctionCall(String::from("Color::Random"), vec![])),
         _ => Err(Error::parse(format!("Unknown color: {}", val.as_str()), coords!(val)))
     }?;
     Ok(BaseValue { val: v, coords: coords!(val) })

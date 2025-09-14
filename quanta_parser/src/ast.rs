@@ -89,7 +89,7 @@ pub enum BaseValueType {
     RandomColor(i32),
     Float(f32),
     Array(Vec<BaseValue>), // Array of BaseValues
-    FunctionCall(String, Vec<Expression>, Type), // Function call with name and arguments
+    FunctionCall(String, Vec<Expression>), // Function call with name and arguments
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -152,17 +152,12 @@ impl TypeName {
 }
 
 impl BaseValue {
-    pub fn get_type<F>(&self, get_var_type: &F) -> Result<TypeName, Error> 
-        where F: Fn(&VariableCall) -> Option<Type>  
+    pub fn get_type(&self) -> Result<TypeName, String> 
     {
         use TypeName::*;
         match &self.val {
             BaseValueType::Id(name) => {
-                if let Some(type_) = get_var_type(&name) {
-                    Ok(type_.type_name)
-                } else {
-                    Err(Error::type_er(format!("Variable type unknown: {}", name.to_string()), self.coords))
-                }
+                Err(format!("{}::type", name))
             }, 
             BaseValueType::Int(_) => Ok(Primitive(BaseType::Int)),
             BaseValueType::Bool(_) => Ok(Primitive(BaseType::Bool)),
@@ -173,16 +168,16 @@ impl BaseValue {
                 if elems.is_empty() {
                     return Ok(Array(Box::new(None), 0));
                 }
-                let type_ = elems.first().unwrap().clone().get_type(get_var_type)?;
+                let type_ = elems.first().unwrap().clone().get_type()?;
                 for elem in elems {
-                    if elem.get_type(get_var_type)? != type_ {
-                        return Err(Error::type_er(format!("Array type unknown"), self.coords));
+                    if elem.get_type()? != type_ {
+                        return Err(format!("Array<??>"));
                     }
                 }
                 Ok(Array(Box::new(Some(Type{type_name:type_, is_const:false})), elems.len()))
             }
-            BaseValueType::FunctionCall(_, _, t) => {
-                Ok(t.type_name.clone())
+            BaseValueType::FunctionCall(name, _) => {
+                Err(format!("{}::return_type", name))
             }
         }
     }
@@ -307,16 +302,15 @@ pub struct AstNode {
 }
 
 impl Expression {
-    pub fn get_type<F>(&self, get_var_type: &F) -> Result<TypeName, Error>
-        where F: Fn(&VariableCall) -> Option<Type>
+    pub fn get_type(&self) -> Result<TypeName, String>
     {
-        let type_mismatch = Err(Error::type_er(format!("Type mismatch error"), self.coords));
+        let type_mismatch = Err(String::from("UNKNOWN"));
         match &self.expr_type {
-            ExpressionType::Value(base_value) => base_value.get_type(get_var_type),
-            ExpressionType::Unary(_, expr) => expr.get_type(get_var_type),
+            ExpressionType::Value(base_value) => base_value.get_type(),
+            ExpressionType::Unary(_, expr) => expr.get_type(),
             ExpressionType::Binary(_, e1, e2) => {
-                let t1 = e1.get_type(get_var_type)?;
-                let t2 = e2.get_type(get_var_type)?;
+                let t1 = e1.get_type()?;
+                let t2 = e2.get_type()?;
                 if let TypeName::Array(ar_typ_1, ar_sz_1) = &t1 {
                     if let TypeName::Array(ar_typ_2, ar_sz_2) = &t2 {
                         if ar_sz_1 != ar_sz_2 {
