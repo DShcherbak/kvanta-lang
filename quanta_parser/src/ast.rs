@@ -11,7 +11,8 @@ pub enum BaseType {
     Int,
     Bool,
     Color,
-    Float
+    Float,
+    StringType,
 }
 
 impl BaseType {
@@ -21,6 +22,7 @@ impl BaseType {
             BaseType::Bool => "bool".to_string(),
             BaseType::Color => "color".to_string(),
             BaseType::Float => "float".to_string(),
+            BaseType::StringType => "string".to_string(),
         }
     }
 }
@@ -85,13 +87,35 @@ pub enum BaseValueType {
     Id(VariableCall),
     Int(i32),
     Bool(bool),
-    //StringVal(String),
+    StringVal(String),
     Color(u8, u8, u8, u8),
     RandomColor(i32),
     Float(f32),
     Array(Vec<BaseValue>), // Array of BaseValues
     ExpandingArray(Arc<BaseValue>),
     FunctionCall(String, Vec<Expression>, Type), // Function call with name and arguments
+}
+
+impl BaseValueType {
+    pub fn to_string(&self) -> String {
+        match self {
+            BaseValueType::Id(var) => format!("{}", var),
+            BaseValueType::Int(value) => format!("{}", value),
+            BaseValueType::Bool(value) => format!("{}", value),
+            BaseValueType::StringVal(value) => format!("\"{}\"", value),
+            BaseValueType::Color(r, g, b, a) => format!("color({}, {}, {}, {})", r, g, b, a),
+            BaseValueType::RandomColor(seed) => format!("random_color({})", seed),
+            BaseValueType::Float(value) => format!("{}", value),
+            BaseValueType::ExpandingArray(inner) => format!("{{{}...}}", inner.val.to_string()),
+            BaseValueType::Array(elems) => {
+                let elems_str: Vec<String> = elems.iter().map(|e| e.val.to_string()).collect();
+                format!("{{{}}}", elems_str.join(", "))
+            },
+            BaseValueType::FunctionCall(name, _, _) => {
+                format!("{}()", name)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

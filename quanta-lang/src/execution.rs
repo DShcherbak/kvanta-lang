@@ -433,25 +433,32 @@ impl Execution {
                 Ok(Some(int(random_value, coords)))
             },
             "print" => {
-                let mut output = String::new();
-                for val in &vals {
-                    match &val.val {
-                        BaseValueType::Int(v) => output.push_str(&format!("{}", v)),
-                        BaseValueType::Float(v) => output.push_str(&format!("{}", v)),
-                        BaseValueType::Bool(v) => output.push_str(&format!("{}", v)),
-                        BaseValueType::Color(r,g,b,a) => output.push_str(&format!("#{:02x}{:02x}{:02x}{:02x}", r, g, b, a)),
-                        BaseValueType::Array(_) => output.push_str(&format!("{:?}", val)),
-                        BaseValueType::FunctionCall(name, _, _) => output.push_str(&format!("<function {}>", name)),
-                        BaseValueType::ExpandingArray(val) => output.push_str(&format!("{:?}...", val)),
-                        BaseValueType::Id(variable_call) => output.push_str(&format!("<variable {:?}>", variable_call)),
-                        BaseValueType::RandomColor(_) => output.push_str(&format!("Color::Random")),
-                    }
-                    output.push(' ');
+                let mut result = String::new();
+                for arg in vals {
+                    result.push_str(arg.val.to_string().as_str());
+                    result.push_str(" ");
                 }
-                output.pop();
-                self.canvas.add_command(format!("print {}", output));
+                result = String::from(result.trim());
+                self.canvas.add_command(format!("output {}", result));
                 Ok(None)
-            }
+            },
+            "input" => {
+                if vals.len() > 0 {
+                    return Err(Error::runtime(String::from("input() takes no arguments"), coords));
+                }
+                self.canvas.add_command(format!("input"));
+                Ok(None)
+            },
+            "output" => {
+                let mut result = String::new();
+                for arg in vals {
+                    result.push_str(arg.val.to_string().as_str());
+                    result.push_str(" ");
+                }
+                result = String::from(result.trim());
+                self.canvas.add_command(format!("output {}", result));
+                Ok(None)
+            },
             name => {
                 if self.functions.contains_key(name) {
                     let (params, _, body) = self.functions.get(name).unwrap();

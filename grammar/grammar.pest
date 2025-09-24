@@ -31,7 +31,7 @@ while_statement =  { "while" ~ "(" ~ expression ~ ")" ~ bracket_block }
 return_statement = { "return" ~ expression ~ ";" }
 
 type_name      =  { const_key? ~ (array_type | primitive_type) }
-primitive_type = { "bool" | "int" | "color" | "float" }
+primitive_type = { "bool" | "int" | "color" | "float" | "string" }
 array_type   = { "array<" ~ type_name ~ "," ~ integer ~ ">" }
 
 number     = { decimal | integer }
@@ -47,10 +47,9 @@ parenth_expr = { "(" ~ expression ~ ")" }
 
 box = {"[" ~ expression ~ "]" }
 noun = {ident ~ box* }
-term = _{ decimal | integer | color | boolean | key | function_call | noun | array_literal | expanded_array_literal | parenth_expr }
+term = _{ decimal | integer | string_literal | color | boolean | key | function_call | noun | array_literal | expanded_array_literal | parenth_expr }
 
 operator = {
-  
   | "+"
   | "*"
   | "-"
@@ -66,6 +65,7 @@ operator = {
   | "||"
   | "!"
 }
+string_literal = { "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 array_literal = { "{" ~ (term ~ ("," ~ term)*)?  ~ "}" }
 expanded_array_literal = { "{" ~ term ~ "..." ~ "}" }
 boolean = { "true" | "false" }
@@ -74,5 +74,4 @@ key   = @{"Key::" ~ ident}
 integer = @{ "-"? ~ ASCII_DIGIT+ }
 decimal = @{ "-"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
 ident   = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
-string  = @{ "'" ~ ("''" | (!"'" ~ ANY))* ~ "'" }
 COMMENT = _{ "//" ~ (!"\n" ~ ANY)* }

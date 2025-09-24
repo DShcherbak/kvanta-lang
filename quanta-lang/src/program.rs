@@ -136,9 +136,11 @@ pub fn create_program(ast: AstProgram) -> Program {
             (String::from("blue"), int_type())
         ], Some(color_type()))),
         (String::from("print"), (vec![], None)),
+        (String::from("input"), (vec![], Some(int_type()))),
+        (String::from("output"), (vec![], None)),
     ]), keywords: HashSet::from(["circle", "line", "rectangle", 
                     "setLineColor", "setFigureColor", "setLineWidth", "polygon", "arc", "sleep", "animate", "frame", "clear", "rgb",
-                    "round", "decimal", "ceil", "floor", "abs", "sqrt", "random", "print",
+                    "round", "decimal", "ceil", "floor", "abs", "sqrt", "random", "print", "input", "output",
                     "for", "while", "global", "func", "if", "else",
                     "int", "bool", "color", "float", "array", "Color", "true", "false"
     ].map(|x| String::from(x)))}
@@ -232,6 +234,7 @@ impl Program {
                                 Primitive(Float) => Expression{expr_type: ExpressionType::Value(BaseValue{val: BaseValueType::Float(0.0), coords: (0,0,0,0)}), coords: (0,0,0,0)},
                                 Primitive(Bool) => Expression{expr_type: ExpressionType::Value(BaseValue{val: BaseValueType::Bool(false), coords: (0,0,0,0)}), coords: (0,0,0,0)},
                                 Primitive(Color) => Expression{expr_type: ExpressionType::Value(BaseValue{val: BaseValueType::Color(0,0,0,255), coords: (0,0,0,0)}), coords: (0,0,0,0)},
+                                Primitive(StringType) => Expression { expr_type: ExpressionType::Value(BaseValue{val: BaseValueType::StringVal("".to_string()), coords: (0,0,0,0)}), coords: (0,0,0,0) },
                                 Array(_, _) => {
                                     Expression{expr_type: ExpressionType::Value(BaseValue{val: BaseValueType::Array(vec![]), coords: (0,0,0,0)}), coords: (0,0,0,0)}
                                 },
@@ -431,7 +434,7 @@ impl Program {
                 }
                 return None;
             }
-            if name == "print" {
+            if name == "print" || name == "output" {
                 return None;
             }
             if params.len() != args.len() {
@@ -662,7 +665,7 @@ impl Program {
             BaseValueType::Id(var) => self.type_check_var(&var, coords),
             BaseValueType::Int(_) => Ok(Type::typ(Int)),
             BaseValueType::Bool(_) => Ok(Type::typ(Bool)),
-            BaseValueType::Color(_, _, _, _) => Ok(Type::typ(Color)),
+            BaseValueType::Color(..) => Ok(Type::typ(Color)),
             BaseValueType::RandomColor(_) => Ok(Type::typ(Color)),
             BaseValueType::Float(_) => Ok(Type::typ(Float)),
             BaseValueType::Array(arr) => {
@@ -674,7 +677,7 @@ impl Program {
                     return Ok(Type{type_name:Array(Box::new(None), 0), is_const: false});
                 }
                 let inner_type = &types.first().unwrap().clone();
-                
+    
                 if let Some(outsider) = types.iter().find(|t| t.type_name != inner_type.type_name) {
                     return Err(Error::type_er(format!("Array elements must all be of type '{}', got '{}'", inner_type, outsider), base.coords));
                 }
@@ -698,6 +701,7 @@ impl Program {
                     }
                 }
             }
+            BaseValueType::StringVal(_) => Ok(Type::typ(StringType)),
         }
     }
 
