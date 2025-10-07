@@ -133,9 +133,10 @@ pub fn create_program(ast: AstProgram) -> Program {
             (String::from("green"), int_type()),
             (String::from("blue"), int_type())
         ], Some(color_type()))),
+        (String::from("print"), (vec![], None)),
     ]), keywords: HashSet::from(["circle", "line", "rectangle", 
                     "setLineColor", "setFigureColor", "setLineWidth", "polygon", "arc", "sleep", "animate", "frame", "clear", "rgb",
-                    "round", "decimal", "ceil", "floor", "abs", "sqrt", "random",
+                    "round", "decimal", "ceil", "floor", "abs", "sqrt", "random", "print",
                     "for", "while", "global", "func", "if", "else",
                     "int", "bool", "color", "float", "array", "Color", "true", "false"
     ].map(|x| String::from(x)))}
@@ -412,6 +413,9 @@ impl Program {
                         }
                     }
                 }
+                return None;
+            }
+            if name == "print" {
                 return None;
             }
             if params.len() != args.len() {

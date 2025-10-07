@@ -43,7 +43,6 @@
 
 //   // Get the syntax node at the current position
 //   const node = tree.resolve(pos, -1);
-//   console.log('Node at cursor:', node);
 
 //   // Example: suggest keywords if the cursor is in an empty spot or at the start of an expression.
 //   if (

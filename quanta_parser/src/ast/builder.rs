@@ -231,23 +231,43 @@ fn improve_expr(&self, expr : Expression) -> (Expression, bool) {
             (Expression{expr_type: ExpressionType::Unary(op, new_inner.into()), coords: expr.coords}, did)
         },
         ExpressionType::Binary(op, left, right) => {
-            let mut new_left : Expression = *left;
-            if let Expression{expr_type: ExpressionType::Unary(UnaryOperator::Parentheses, _), coords: _} = new_left {
-                (new_left, _) = self.improve_expr(new_left);
-            }
-            if let Expression{expr_type: ExpressionType::Binary(r_op, r_left, r_right), coords} = *right.clone() {
-                if goes_before(op, r_op) {
-                    return self.improve_expr(bin(r_op, 
-                            bin(op, new_left.into(), r_left, coords).into(), r_right, expr.coords))
-                } else {
-                    let (new_right, redo) = self.improve_expr(*right);
-                    if redo {
-                        return self.improve_expr(bin(op, new_left.into(), new_right.into(), expr.coords));
+            let (new_left, impr_left) = self.improve_expr(*left.clone());
+            let (new_right, impr_right) = self.improve_expr(*right.clone());
+
+            match &new_left.expr_type {
+                ExpressionType::Binary(l_op, l_left, l_right) => {
+                    if goes_before(op, *l_op) {
+                        return self.improve_expr(bin(*l_op, l_left.clone(), bin(op, l_right.clone(), new_right.into(), expr.coords).into(), expr.coords))
                     }
-                    return (bin(op, new_left.into(), new_right.into(), expr.coords), false)
-                }
+                },
+                _ => {}
             }
-            (bin(op, new_left.into(), right, expr.coords), false)
+            match &new_right.expr_type {
+                ExpressionType::Binary(r_op, r_left, r_right) => {
+                    if goes_before(op, *r_op) {
+                        return self.improve_expr(bin(*r_op, bin(op, new_left.into(), r_left.clone(), expr.coords).into(), r_right.clone(), expr.coords))
+                    }
+                },
+                _ => {}
+            }
+
+            // let mut new_left : Expression = *left;
+            // if let Expression{expr_type: ExpressionType::Unary(UnaryOperator::Parentheses, _), coords: _} = new_left {
+            //     (new_left, _) = self.improve_expr(new_left);
+            // }
+            // if let Expression{expr_type: ExpressionType::Binary(r_op, r_left, r_right), coords} = *right.clone() {
+            //     if goes_before(op, r_op) {
+            //         return self.improve_expr(bin(r_op, 
+            //                 bin(op, new_left.into(), r_left, coords).into(), r_right, expr.coords))
+            //     } else {
+            //         let (new_right, redo) = self.improve_expr(*right);
+            //         if redo {
+            //             return self.improve_expr(bin(op, new_left.into(), new_right.into(), expr.coords));
+            //         }
+            //         return (bin(op, new_left.into(), new_right.into(), expr.coords), false)
+            //     }
+            // }
+            (bin(op, new_left.into(), new_right.into(), expr.coords), impr_left || impr_right)
         },
     }
 }
@@ -587,7 +607,6 @@ fn build_ast_from_while(&self, command: Pairs<Rule>, coords: Coords) -> Result<A
 }
 
 fn build_ast_from_array_type(&self, type_val: Pairs<Rule>) -> Result<TypeName, Error> {
-    
     let mut iter = type_val.into_iter().next().unwrap().into_inner().into_iter();
     let inner_type = self.build_ast_from_type(iter.next().unwrap())?;
     let val = iter.next().unwrap();

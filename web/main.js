@@ -33,7 +33,7 @@ import { quanta, quantaSyntax, quantaLanguageSupport } from "./quanta-support.ts
 import { quantaTheme } from "./custom-theme";
 
 // Canvas runtime (drawScript + utilities)
-import { drawScript, setup, checkIsCancelled, cancelNow } from "./canvas-runtime.js";
+import { drawScript, setup, checkIsCancelled, cancelNow, setIsSafari } from "./canvas-runtime.js";
 
 // WASM glue (wasm-pack output); adjust crate name/path
 import initWasm, { Compiler } from "../quanta-lang/pkg/quanta_lang.js"; 
@@ -108,11 +108,10 @@ function showError(editor, err) {
 }
 
 function alertError(err) {
-    console.log(err.get_error_message() + " at " 
+    console.log("Error:" + err.get_error_message() + " at " 
         + err.start_row + ":" + err.start_column
         + " - " + err.end_row + ":" + err.end_column);
     alert("Error at " + err.start_row + ":" + err.start_column + " - " + err.end_row + ":" + err.end_column + "\n" + err.get_error_message());
-
 }
 
 function showOk(editor) {
@@ -165,7 +164,6 @@ async function tryCompile(editor, src) {
   //   runBtn.disabled = false;
   //   return;
    } else {
-    console.log("OK!");
   //   showOk(editor);
    }
 }
@@ -206,28 +204,28 @@ const fontSizeKeys = keymap.of([
   {
     key: "Mod-=",
     run: (view) => {
-      console.log("BIGGER");
       currentFontSize += 1;
       view.dispatch({
         effects: fontSizeCompartment.reconfigure(fontSizeTheme(currentFontSize))
       });
-      console.log("SIZE NOW: " + currentFontSize);
       return true;
     }
   },
   {
     key: "Mod--",
     run: (view) => {
-      console.log("SMALLER");
       currentFontSize = Math.max(8, currentFontSize - 1);
       view.dispatch({
         effects: fontSizeCompartment.reconfigure(fontSizeTheme(currentFontSize))
       });
-      console.log("SIZE NOW: " + currentFontSize);
       return true;
     }
   }
 ]);
+
+let itIsSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+setIsSafari(itIsSafari);
 
 const editor = new EditorView({
   state: EditorState.create({
@@ -317,7 +315,6 @@ function sleep(ms) {
 
 function doStop() {
   (async() => {
-    console.log("STOP!");
     runtime = undefined;
     cancelNow()
   })();
@@ -339,7 +336,6 @@ async function executeMouse(x, y) {
 //   if (!runtime || !runtime.execute_key) return;
 
 //   try {
-//     console.log("Got key: " + e.key);
 //     (async () => {runtime.execute_key(e.key);})(); // pass string like 'a', 'Enter', etc.
 //   } catch (err) {
 //     console.warn('Keyboard runtime error:', err);
@@ -366,7 +362,6 @@ function doRun() {
       } else {
         showOk(editor);
       }
-      console.log("Compiling done");
       setRunningUI();
       runtime = compilation_result.get_runtime();
       startExecution();
