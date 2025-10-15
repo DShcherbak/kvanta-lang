@@ -373,17 +373,38 @@ fn build_ast_from_expression(&self, expression: Pair<Rule>) -> Result<Expression
     Ok(res)
 }
 
+fn build_ast_from_term(&self, term : Pair<Rule>) -> Result<Expression, Error> {
+    let coords = coords!(term);
+    match term.as_rule() {
+        Rule::parenth_expr => {
+            let inner_expr = self.build_ast_from_expression_inner(term.into_inner().into_iter().next().unwrap().into_inner().into_iter().next().unwrap())?;
+            Ok(Expression{expr_type: ExpressionType::Unary(super::UnaryOperator::Parentheses, inner_expr.into()), coords: coords})
+        },
+        _ => {
+            Ok(Expression{expr_type: ExpressionType::Value(self.build_ast_from_value(term)?), coords: coords})
+        }
+    }
+}
+
 fn build_ast_from_expression_inner(&self, expression: Pair<Rule>) -> Result<Expression, Error> {
     let coords = coords!(expression);
     match expression.as_rule() {
         Rule::monadicExpr => {
             let mut iter = expression.into_inner().into_iter();
             let operator = iter.next().unwrap();
-            let right = self.build_ast_from_expression_inner(iter.next().unwrap())?;
+            let right = self.build_ast_from_term(iter.next().unwrap())?;
             if operator.as_str() == "-" {
-                Ok(Expression{expr_type: ExpressionType::Unary(super::UnaryOperator::UnaryMinus, right.into()), coords})
+                Ok(Expression{
+                    expr_type: ExpressionType::Unary(
+                        super::UnaryOperator::UnaryMinus, 
+                        right.into())
+                        , coords})
             } else if operator.as_str() == "!" {
-                Ok(Expression{expr_type: ExpressionType::Unary(super::UnaryOperator::NOT, right.into()), coords: coords})
+                Ok(Expression{
+                    expr_type: ExpressionType::Unary(
+                        super::UnaryOperator::NOT, 
+                        right.into())
+                        , coords})
             } else {
                 Err(Error::parse(format!("Unknown unary operator {}", operator.as_str()), coords))
             }

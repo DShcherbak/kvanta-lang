@@ -36,12 +36,12 @@ array_type   = { "array<" ~ type_name ~ "," ~ integer ~ ">" }
 
 number     = { decimal | integer }
 expression = {
-    monadicExpr
-  | dyadicExpr
+	dyadicExpr
+  | monadicExpr
   | term
 }
 
-monadicExpr  = { operator ~ expression }
+monadicExpr  = { operator ~ term }
 dyadicExpr   = { (monadicExpr | term) ~ operator ~ expression }
 parenth_expr = { "(" ~ expression ~ ")" }
 
