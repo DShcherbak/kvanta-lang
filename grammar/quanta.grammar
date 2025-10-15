@@ -1,4 +1,4 @@
-@top Program { expression* }
+@top Program { line* }
 
 @precedence {
   mult @left
@@ -12,9 +12,13 @@
   or @left
 }
 
-expression { Function | GlobalBlock | FunctionCall | IfExpression | ForExpression | WhileExpression | ReturnExpression | Name | Number | Float | Color | Key | BinaryExpression }
+line { Comment | expression }
+
+expression { Function | GlobalBlock | FunctionCall | IfExpression | ForExpression | WhileExpression | ReturnExpression | Name | Type  | Number | Float | Color | Key | BinaryExpression }
 
 GlobalBlock { Global Block }
+
+Comment { CommentInfo }
 
 Function { Func FuncName "(" Args? ")" Block}
 
@@ -42,7 +46,7 @@ Block { "{" expression* "}" }
 
 BinaryExpression {
   expression !add ArithOp { "+" | "-" } expression |
-  expression !mult ArithOp { "*" | "/" | "%" } expression |
+  expression !mult ArithOp { "*" | Division | "%" } expression |
   expression !shift BitOp { "<<" | ">>" } expression |
   expression !bitAnd BitOp { "&" } expression |
   expression !bitXor BitOp { "^" } expression |
@@ -52,23 +56,59 @@ BinaryExpression {
   expression !or LogicOp { "||" } expression
 }
 
+Type {
+  @specialize[@name=Type]<Name,
+    "bool" | "char" | "int" | "float">
+}
+
+If {
+  @specialize[@name=If]<Name, "if">
+}
+
+In {
+  @specialize[@name=In]<Name, "in">
+}
+
+For {
+  @specialize[@name=For]<Name, "for">
+}
+
+While {
+  @specialize[@name=While]<Name, "while">
+}
+
+Else {
+  @specialize[@name=Else]<Name, "else">
+}
+
+Return {
+  @specialize[@name=Return]<Name, "return">
+}
+
+Global {
+  @specialize[@name=Global]<Name, "global">
+}
+
+Color {
+  @specialize[@name=Color]<Name, "Color">
+}
+
+Key {
+  @specialize[@name=Key]<Name, "Key">
+}
+
+Func {
+  @specialize[@name=Func]<Name, "func">
+}
+
 @tokens {
   Name { @asciiLetter $[a-zA-Z0-9_]* }
   //FuncName {@asciiLetter+}
   Number { @digit+ }
   Float {@digit+ "." @digit+}
-  Type {"int" | "bool" | "color" | "float"}
-  Func { "func" }
-  If { "if" }
-  For { "for" }
-  In {"in"}
-  While { "while" }
-  Else { "else" }
-  Return { "return" }
-  Global { "global" }
-  Color {"Color"}
-  Key{"Key"}
-  @precedence {Type, Func, If, In, For, While, Else, Return, Global, Color, Key, Name, Float, Number}
+  CommentInfo { "//" ![\n]* }
+  Division { "/" }
+  @precedence {Name, Float, Number, CommentInfo, Division}
 }
 
 @external propSource quantaHighlight from "./highlight"

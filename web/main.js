@@ -373,8 +373,8 @@ function doRun() {
           if (checkIsCancelled()) { return; }
           const block = blocks[i];
           let commands = block.get_commands();
-          drawScript(commands, block.should_draw_frame);
           let blockStatus = block.get_status();
+          drawScript(commands, blockStatus == 0);
           if (blockStatus == 3) { // Error
             const err = runtime.get_runtime_error();
             showError(editor, err);

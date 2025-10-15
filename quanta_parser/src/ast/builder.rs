@@ -244,7 +244,7 @@ fn improve_expr(&self, expr : Expression) -> (Expression, bool) {
             }
             match &new_right.expr_type {
                 ExpressionType::Binary(r_op, r_left, r_right) => {
-                    if goes_before(op, *r_op) {
+                    if !goes_before(*r_op, op) {
                         return self.improve_expr(bin(*r_op, bin(op, new_left.into(), r_left.clone(), expr.coords).into(), r_right.clone(), expr.coords))
                     }
                 },
