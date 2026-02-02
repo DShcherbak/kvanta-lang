@@ -47,7 +47,7 @@ parenth_expr = { "(" ~ expression ~ ")" }
 
 box = {"[" ~ expression ~ "]" }
 noun = {ident ~ box* }
-term = _{ decimal | integer | color | boolean | key | function_call | noun | array_literal | parenth_expr }
+term = _{ decimal | integer | color | boolean | key | function_call | noun | array_literal | expanded_array_literal | parenth_expr }
 
 operator = {
   
@@ -67,6 +67,7 @@ operator = {
   | "!"
 }
 array_literal = { "{" ~ (term ~ ("," ~ term)*)?  ~ "}" }
+expanded_array_literal = { "{" ~ term ~ "..." ~ "}" }
 boolean = { "true" | "false" }
 color = @{"Color::" ~ ident}
 key   = @{"Key::" ~ ident}

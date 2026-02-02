@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::{collections::{HashMap, HashSet, LinkedList}, sync::Arc};
 
 use quanta_parser::{ast::*, error::Error};
 use BaseType::*;
@@ -29,6 +29,7 @@ pub struct Program {
     pub global_vars : HashMap<String, (Type, Expression)>,
     pub function_defs : HashMap<String, (Vec<(String, Type)>, Option<Type>)>,
     pub functions : HashMap<String, (Vec<(String, Type)>, Option<Type>, AstBlock)>,
+    pub expanded_arrays : LinkedList<Expression>,
     keywords: HashSet<String>
 }
 
@@ -67,6 +68,7 @@ fn color_type() -> Type
 pub fn create_program(ast: AstProgram) -> Program {
     Program {lines: ast, scope: Scope { variables: HashMap::new(), outer_scope: Box::new(None) }, 
     global_vars: HashMap::new(),
+    expanded_arrays: LinkedList::new(),
     functions: HashMap::new(), function_defs: HashMap::from([
         (String::from("circle"), (vec![
             (String::from("x"), int_type()),
@@ -167,13 +169,18 @@ impl Program {
             global_vars: self.global_vars.clone(),
             functions: self.functions.clone(),
             function_defs: self.function_defs.clone(),
+            expanded_arrays: self.expanded_arrays.clone(),
             keywords: self.keywords.clone()
         }
     }
 
     pub fn type_check(&mut self) -> Result<ReturnType, Error> {
         match self.lines {
-            AstProgram::Block(ref block) => self.type_check_block(block.clone()),
+            AstProgram::Block(ref block) => {
+                let (return_type, new_block) = self.type_check_block(block.clone())?;
+                self.lines = quanta_parser::ast::AstProgram::Block(new_block);
+                return Ok(return_type);
+            }
             AstProgram::Forest(ref forest) => {
                 for func in &forest.0 {
                     if self.keywords.contains(&func.name) {
@@ -225,75 +232,79 @@ impl Program {
                                 Primitive(Float) => Expression{expr_type: ExpressionType::Value(BaseValue{val: BaseValueType::Float(0.0), coords: (0,0,0,0)}), coords: (0,0,0,0)},
                                 Primitive(Bool) => Expression{expr_type: ExpressionType::Value(BaseValue{val: BaseValueType::Bool(false), coords: (0,0,0,0)}), coords: (0,0,0,0)},
                                 Primitive(Color) => Expression{expr_type: ExpressionType::Value(BaseValue{val: BaseValueType::Color(0,0,0,255), coords: (0,0,0,0)}), coords: (0,0,0,0)},
-                                //Primitive(StringType) => Expression{expr_type: ExpressionType::Value(BaseValue{val: BaseValueType::StringVal(String::new()), coords: (0,0,0,0)}), coords: (0,0,0,0)},
                                 Array(_, _) => {
                                     Expression{expr_type: ExpressionType::Value(BaseValue{val: BaseValueType::Array(vec![]), coords: (0,0,0,0)}), coords: (0,0,0,0)}
-                                }
-                            }
+                                },
+                                ExpandingArray(_, _) => todo!(),}
                         };
                         sub.scope.variables.insert(arg.0.clone(), (arg.1.clone(), simple_expr));
                     }
-                    if let Some(err) = sub.type_check_function(func.clone()) {
-                        return Err(err);
+                    let new_block = sub.type_check_function(func.clone())?;
+                    if let AstProgram::Block(ast) = new_block {
+                        println!("Got new astblock: {:?}", ast);
+                        self.functions.insert(func.name.clone(), (func.args.clone(), func.return_type.clone(), ast));
                     }
-                    self.functions.insert(func.name.clone(), (func.args.clone(), func.return_type.clone(), func.block.clone()));
                 }
                 Ok(ReturnType::None)
             }
         }
     }
 
-    pub fn type_check_function(&mut self, func: AstFunction) -> Option<Error> {
+    pub fn type_check_function(&mut self, func: AstFunction) -> Result<AstProgram, Error> {
         let mut func_prog = self.create_subprogram(Some(func.block));
         match func_prog.type_check() {
             Ok(ReturnType::Full(t)) => {
                 if let Some(return_type) = &func.return_type {
                     if t != *return_type {
-                        Some(Error::logic(format!("Function {} return type mismatch: expected '{}', got '{}'", func.name, return_type, t), func.header))
+                        Err(Error::logic(format!("Function {} return type mismatch: expected '{}', got '{}'", func.name, return_type, t), func.header))
                     } else {
-                        None
+                        Ok(func_prog.lines)
                     }
                 } else {
-                    Some(Error::logic(format!("Function {} has no return type defined, but returns {}", func.name, t), func.header))
+                    Err(Error::logic(format!("Function {} has no return type defined, but returns {}", func.name, t), func.header))
                 }
             },
             Ok(ReturnType::Partial(t)) => {
                 if let Some(return_type) = &func.return_type {
                     if t != *return_type {
-                        return Some(Error::logic(format!("Function {} return type mismatch: expected '{}', got '{}'", func.name, return_type, t), func.header));
+                        return Err(Error::logic(format!("Function {} return type mismatch: expected '{}', got '{}'", func.name, return_type, t), func.header));
                     }
-                    return Some(Error::logic(format!("Expected a return statement at the end of function {}", func.name), func.header));
+                    return Err(Error::logic(format!("Expected a return statement at the end of function {}", func.name), func.header));
                 } else {
-                    return Some(Error::logic(format!("Function {} has no return type defined", func.name), func.header));
+                    return Err(Error::logic(format!("Function {} has no return type defined", func.name), func.header));
                 }
             },
             Ok(ReturnType::None) => {
                 if let Some(rt) = func.return_type {
-                    return Some(Error::logic(format!("Function {} has a return type '{}' defined but does not return anything", func.name, rt), func.header));
+                    return Err(Error::logic(format!("Function {} has a return type '{}' defined but does not return anything", func.name, rt), func.header));
                 }
-                None
+                Ok(func_prog.lines)
             },
-            Err(err) => return Some(err),   
+            Err(err) => return Err(err),   
         }
     }
 
-    pub fn type_check_block(&mut self, block : AstBlock) -> Result<ReturnType, Error> {
+    pub fn type_check_block(&mut self, block : AstBlock) -> Result<(ReturnType, AstBlock), Error> {
         let mut return_type: Option<Type> = None;
+        let mut new_block : AstBlock = AstBlock{ nodes: vec![], coords: block.coords };
         for line in block.nodes {
-            match line.statement {
+            match &line.statement {
                 AstStatement::Command { name, args } => {
                     if let Some(err) = self.clone().type_check_command(name.clone(), args.clone(), line.coords) {
                         return Err(err);
                     }
                 },
                 AstStatement::Init { typ, val, expr } => {
-                    if self.keywords.contains(&val) {
+                    if self.keywords.contains(val) {
                         return Err(Error::type_er(format!("'{}' is a keyword, it cannot be the name of a variable", &val), line.coords));
                     }
                     match self.clone().type_check_init(typ.clone(), val.clone(), expr.clone(), line.coords) {
                         Err(err) => return Err(err),
-                        Ok(tupl) => {
-                            self.scope.variables.insert(val.clone().trim().to_string(), tupl);
+                        Ok((new_type, new_expr)) => {
+                            self.scope.variables.insert(val.clone().trim().to_string(), (new_type.clone(), new_expr.clone()));
+                            println!("Got new value for that array: {:?}", new_expr);
+                            new_block.nodes.push(AstNode { statement: AstStatement::Init { typ: new_type.clone(), val: val.clone().trim().to_string(), expr: new_expr }, coords: line.coords });
+                            continue;
                         }
                     }
                 },
@@ -329,7 +340,8 @@ impl Program {
                                     return Err(Error::logic(format!("If block return type mismatch: expected '{}', got '{}'", rt, t), line.coords));
                                 }
                             }
-                            return Ok(ReturnType::Full(t));
+                            new_block.nodes.push(line);
+                            return Ok((ReturnType::Full(t), new_block));
                         }
                     }
                 },
@@ -351,7 +363,8 @@ impl Program {
                                     return Err(Error::logic(format!("For block return type mismatch: expected '{}', got '{}'", rt, t), line.coords));
                                 }
                             }
-                            return Ok(ReturnType::Full(t));
+                            new_block.nodes.push(line);
+                            return Ok((ReturnType::Full(t), new_block));
                         }
                     }
                 },
@@ -373,7 +386,8 @@ impl Program {
                                     return Err(Error::logic(format!("For block return type mismatch: expected '{}', got '{}'", rt, t), line.coords));
                                 }
                             }
-                            return Ok(ReturnType::Full(t));
+                            new_block.nodes.push(line);
+                            return Ok((ReturnType::Full(t), new_block));
                         }
                     }
                 }
@@ -384,14 +398,16 @@ impl Program {
                             return Err(Error::logic(format!("Return type mismatch: expected '{}', got '{}'", rt, expr_type), line.coords));
                         }
                     }
-                    return Ok(ReturnType::Full(expr_type))
+                    new_block.nodes.push(line);
+                    return Ok((ReturnType::Full(expr_type), new_block))
                 },
             }
+            new_block.nodes.push(line);
         }
         if let Some(rt) = &return_type {
-            Ok(ReturnType::Partial(rt.clone()))
+            Ok((ReturnType::Partial(rt.clone()), new_block))
         } else {
-            Ok(ReturnType::None)
+            Ok((ReturnType::None, new_block))
         }
     }
 
@@ -450,7 +466,21 @@ impl Program {
         Ok((var_type, expr))
     }
 
-    fn type_check_init(&self, new_type_def : Type, val : String, expr : Expression, coords: Coords) -> Result<(Type, Expression), Error>{
+    fn fill_array_recursive(&self, array_type : &Type, val: BaseValue) -> BaseValue {
+        match &array_type.type_name {
+            Primitive(base_type) => val,
+            Array(inner_type, size) => {
+                let inner_value = self.fill_array_recursive(&inner_type.clone().unwrap(), val);
+                let result = std::iter::repeat_n(inner_value, *size).collect();
+                BaseValue{ val: BaseValueType::Array(result), coords: (0,0,0,0) }
+            }
+            ExpandingArray(_,_) => {
+                panic!("Variable type cannot be an array literal!");
+            }
+        }
+    } 
+
+    fn type_check_init(&mut self, new_type_def : Type, val : String, expr : Expression, coords: Coords) -> Result<(Type, Expression), Error>{
         if self.keywords.contains(&val) {
             return Err(Error::type_er(format!("'{}' cannot be a variable, it is a keyword", val), coords));
         }
@@ -460,6 +490,15 @@ impl Program {
             let expr_type = self.clone().type_check_expr(&expr)?;
             if !new_type_def.can_assign(&expr_type) {
                 return Err(Error::logic(format!("Cannot assign expression of type '{}' to variable '{}' of type '{}'!", expr_type, val, new_type_def), coords));
+            }
+            if let ExpandingArray(_, inner_val) = expr_type.type_name {
+                if let TypeName::Array(_, _) = &new_type_def.type_name {
+                    let new_val = self.fill_array_recursive(&new_type_def, (*inner_val).clone());
+                    self.expanded_arrays.push_back(Expression{expr_type: ExpressionType::Value(new_val.clone()), coords: coords});
+                    return Ok((new_type_def, Expression{expr_type: ExpressionType::Value(new_val), coords: coords}));
+                } else {
+                    return Err(Error::type_er(format!("Cannot assign an expanding array to a value of type {}", new_type_def), coords));
+                }
             }
             Ok((new_type_def, expr))
         }
@@ -641,6 +680,7 @@ impl Program {
                 }
                 Ok(Type{type_name:Array(Box::new(Some(inner_type.clone())), arr.len()), is_const: false})
             },
+            BaseValueType::ExpandingArray(val) => Ok(Type{type_name:ExpandingArray(Arc::new(self.type_check_baseval(&val.clone())?), val.clone()), is_const: false}),
             BaseValueType::FunctionCall(name,arg_list, return_type ) => {
                 match self.function_defs.get(name) {
                     None => Err(Error::type_er(format!("Unknown function '{}'", name), base.coords)),

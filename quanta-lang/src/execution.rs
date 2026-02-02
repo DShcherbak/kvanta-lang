@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::{Arc, Mutex}};
+use std::{collections::{HashMap, LinkedList}, sync::{Arc, Mutex}};
 
 use gloo_timers::future::TimeoutFuture;
 use quanta_parser::{ast::{AstBlock, AstNode, AstProgram, AstStatement, BaseValue, BaseValueType, Coords, Expression, ExpressionType, Operator, Type, UnaryOperator, VariableCall}, error::Error};
@@ -67,6 +67,7 @@ pub struct Execution {
     pub line_color : Arc<Mutex<String>>,
     pub line_width : Arc<Mutex<i32>>,
     pub random_color: Arc<Mutex<i32>>,
+    pub expanded_arrays: Arc<Mutex<LinkedList<Expression>>>
 }
 
 fn color_to_str(r: &u8, g : &u8, b: &u8, a: &u8) -> String {
@@ -151,6 +152,7 @@ impl Execution {
             line_color: self.line_color.clone(),
             line_width: self.line_width.clone(),
             random_color: Arc::clone(&self.random_color),
+            expanded_arrays: Arc::clone(&self.expanded_arrays)
         }
     }
 
@@ -214,14 +216,14 @@ impl Execution {
                 }
                 let mut array = maybe_array.unwrap();
                 while integer_indices.len() > 0 {
-                    if let BaseValueType::Array(elems) = array.val {
+                    if let BaseValueType::Array(elems) = array.val.clone() {
                         let index = integer_indices.remove(0);
                         if index < 0 || index as usize >= elems.len() {
                             return Err(Error::runtime(format!("Index out of bounds for array {}: {}", name, index), coords));
                         }
                         array = elems.get(index as usize).unwrap().clone();
                     } else {
-                        return Err(Error::runtime(format!("Variable {} is not an array", name), coords));
+                        return Err(Error::runtime(format!("Variable {} is not an array, but is a {:?}", name, array), coords));
                     }
                 }
                 Ok(array)
@@ -440,6 +442,7 @@ impl Execution {
                         BaseValueType::Color(r,g,b,a) => output.push_str(&format!("#{:02x}{:02x}{:02x}{:02x}", r, g, b, a)),
                         BaseValueType::Array(_) => output.push_str(&format!("{:?}", val)),
                         BaseValueType::FunctionCall(name, _, _) => output.push_str(&format!("<function {}>", name)),
+                        BaseValueType::ExpandingArray(val) => output.push_str(&format!("{:?}...", val)),
                         BaseValueType::Id(variable_call) => output.push_str(&format!("<variable {:?}>", variable_call)),
                         BaseValueType::RandomColor(_) => output.push_str(&format!("Color::Random")),
                     }
@@ -496,11 +499,11 @@ impl Execution {
                 self.execute_commands(block.nodes.clone()).await?;
                 self.canvas.add_command("end".into());
             },
-            AstProgram::Forest(ref funcs) => {
-                for func in &funcs.0 {
-                    if func.name == "main" {
+            AstProgram::Forest(_) => {
+                for (func_name, (_, _, block)) in &self.functions {
+                    if func_name == "main" {
                         let mut new_exec = self.create_subscope();
-                        new_exec.execute_commands(func.block.nodes.clone()).await?;
+                        new_exec.execute_commands(block.nodes.clone()).await?;
                         self.canvas.add_command("end".into());
                         return Ok(());
                     }
@@ -552,7 +555,6 @@ impl Execution {
 
     pub fn execute_commands<'a>(&'a mut self, nodes : Vec<AstNode>) -> Pin<Box<dyn Future<Output = Result<Option<BaseValue>, Error>> + 'a>> {
         Box::pin(async move {
-            TimeoutFuture::new(1).await;
             for line in nodes {
                 match line.statement {
                     AstStatement::Command { name, args } => {
@@ -664,8 +666,16 @@ impl Execution {
                                 return Ok(v);
                             }
                             return Err(Error::runtime(format!("Function {} didn't return a value", name), expr.coords));
+                        },
+                        x => Ok(BaseValue { val: x, coords: base_value.coords }),
+                        BaseValueType::ExpandingArray(arr) => {
+                            let change_queue = &mut self.expanded_arrays.lock().unwrap();
+                            if let Some(true_value) = change_queue.pop_front() {
+                                return Ok(self.calculate_expression(true_value).await?);
+                            }
+                            Err(Error::runtime(format!("Couldn't unwrap expanding array"), expr.coords))   
+                            
                         }
-                        x => Ok(BaseValue { val: x, coords: base_value.coords })
                     }
                 },
                 ExpressionType::Unary(op, inner) => {
