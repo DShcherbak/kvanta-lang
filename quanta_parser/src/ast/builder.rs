@@ -508,6 +508,7 @@ fn build_ast_from_value(&self, val: Pair<Rule>) -> Result<BaseValue, Error> {
         Rule::integer => Ok(BaseValueType::Int(val.as_str().parse::<i32>().unwrap())),
         Rule::decimal => Ok(BaseValueType::Float(val.as_str().parse::<f32>().unwrap())),
         Rule::boolean => Ok(BaseValueType::Bool(val.as_str() == "true")),
+        Rule::string_literal  => Ok(BaseValueType::StringVal(String::from(&val.as_str()[1..val.as_str().len()-1]))),
         Rule::color   => {return self.build_ast_from_color(val);},
         Rule::key     => {return self.build_ast_from_key(val);},
         Rule::noun   => Ok(BaseValueType::Id(self.build_ast_from_noun(val)?)),
@@ -523,7 +524,6 @@ fn build_ast_from_value(&self, val: Pair<Rule>) -> Result<BaseValue, Error> {
             Ok(BaseValueType::ExpandingArray(Arc::new(value)))
         }
         Rule::function_call => {
-            let coords = coords!(val);
             let mut iter = val.into_inner().into_iter();
             let name = self.build_ast_from_ident(iter.next().unwrap())?;
             let args = self.build_ast_from_arglist(iter)?;
@@ -658,6 +658,7 @@ fn build_ast_from_inner_type(&self, type_val: Pairs<Rule>) -> Result<TypeName, E
         "bool" => Ok(TypeName::Primitive(Bool)),
         "color" => Ok(TypeName::Primitive(Color)),
         "float" => Ok(TypeName::Primitive(Float)),
+        "string" => Ok(TypeName::Primitive(StringType)),
         t => Err(Error::parse(format!("Unknown type: {}", t), coords!(type_val.clone().next().unwrap())))
     }
 }
