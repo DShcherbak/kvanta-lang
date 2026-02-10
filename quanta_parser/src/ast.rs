@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt};
+use std::{collections::HashMap, fmt, sync::Arc};
 
 use pest::iterators::Pairs;
 
@@ -90,6 +90,7 @@ pub enum BaseValueType {
     RandomColor(i32),
     Float(f32),
     Array(Vec<BaseValue>), // Array of BaseValues
+    ExpandingArray(Arc<BaseValue>),
     FunctionCall(String, Vec<Expression>, Type), // Function call with name and arguments
 }
 
@@ -116,6 +117,15 @@ impl fmt::Display for Type {
 pub enum TypeName {
     Primitive(BaseType),
     Array(Box<Option<Type>>, usize), // Array of a certain type with a fixed size
+    ExpandingArray(Arc<Type>, Arc<BaseValue>)
+}
+
+fn get_underlying_type(t: Type) -> Type {
+    match t.type_name.clone() {
+        TypeName::Primitive(_) => t,
+        TypeName::Array(inner, _) => get_underlying_type(inner.unwrap()),
+        TypeName::ExpandingArray(t1, _) => (*t1).clone()
+    }
 }
 
 impl Type {
@@ -137,6 +147,9 @@ impl Type {
                 if t2.is_none() { return true; }
                 if t1.is_none() { return false; }
                 return size1 == size2 && t1.clone().unwrap().can_assign(&t2.clone().unwrap());
+            } else if let TypeName::ExpandingArray(t2, _) = &t.type_name { 
+                let under = get_underlying_type(t1.clone().unwrap());
+                return under == **t2;
             } else {
                 return false;
             }
@@ -156,6 +169,9 @@ impl TypeName {
                 };
                 format!("array<{},{}>", inner, size)
             },
+            TypeName::ExpandingArray(x, _) => {
+                format!("{{{}...}}", x.to_string())
+            }
         }
     }
 }
@@ -194,6 +210,7 @@ impl BaseValue {
             BaseValueType::FunctionCall(_, _, t) => {
                 Ok(t.type_name.clone())
             }
+            _ => Err(Error::type_er(format!("Array type unknown"), self.coords))
         }
     }
 }

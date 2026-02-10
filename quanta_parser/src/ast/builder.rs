@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use pest::iterators::{Pairs, Pair};
 use crate::{ast::{keys::key_to_number, AstFunction, AstProgram, AstStatement, BaseValueType, Coords, ExpressionType, FunctionsAndGlobals, HalfParsedAstFunction, SimpleExpression, SimpleExpressionType, SimpleValue, SimpleValueType, Type, TypeName, VariableCall}, error::Error, Rule};
@@ -518,6 +518,10 @@ fn build_ast_from_value(&self, val: Pair<Rule>) -> Result<BaseValue, Error> {
             }
             Ok(BaseValueType::Array(elements))
         },
+        Rule::expanded_array_literal => {
+            let value = self.build_ast_from_value(val.into_inner().into_iter().next().unwrap())?;
+            Ok(BaseValueType::ExpandingArray(Arc::new(value)))
+        }
         Rule::function_call => {
             let coords = coords!(val);
             let mut iter = val.into_inner().into_iter();

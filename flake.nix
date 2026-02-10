@@ -37,7 +37,9 @@
                   pkgsUnstable.nodejs_22
                   vscode-langservers-extracted # <-- change here
                   wasm-pack
-		  python3
+		              python3
+                  cargo
+                  llvmPackages.lldb
                 ];
 
                 CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_LINKER = "lld"; 
