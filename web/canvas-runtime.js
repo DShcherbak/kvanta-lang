@@ -105,10 +105,8 @@ function drawArc(cx,cy,r,a0,a1,ccw,o){ ctx.beginPath(); ctx.arc(toPx(cx,'x'), to
 
 export function drawScript(script, should_draw_frame=false){
   ctx.save(); ctx.lineJoin='round'; ctx.lineCap='round';
-  const lines = String(script||'').split(/,/);
-  //bufferCanvas.width = drawCanvas.width;
-  //bufferCanvas.height = drawCanvas.height;
-  for (const raw of lines) {
+  for(var i = 0; i < script.length; i += 1) {
+    let raw = script[i];
     if (isCancelled) { return; }
     const line = raw.trim();
     if (!line || line.startsWith('//')) continue;

@@ -422,7 +422,7 @@ pub struct AstFunction {
     pub header: Coords,
 }
 
-pub type FunctionsAndGlobals = (Vec<AstFunction>, HashMap<String, (Coords, Type, Expression)>);
+pub type FunctionsAndGlobals = (Vec<AstFunction>, Vec<(AstStatement, (usize, usize, usize, usize))>);
 
 #[derive(Debug, Clone)]
 pub enum AstProgram {

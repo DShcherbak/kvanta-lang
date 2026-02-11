@@ -55,7 +55,7 @@ pub fn build_ast_from_doc(&mut self, docs: Pairs<Rule>) -> Result<AstProgram, Er
 
 fn build_ast_from_forest(&mut self, statements: Pairs<Rule>) -> Result<FunctionsAndGlobals, Error> {
     let mut half_functions = vec![];
-    let mut init_statements :HashMap<String, ((usize, usize, usize, usize), Type, Expression)> = HashMap::new();
+    let mut init_statements :Vec<(AstStatement, (usize, usize, usize, usize))> = vec![];
     let mut blocks : Vec<AstFunction> = vec![];
     for pair in statements.clone() {
         match pair.as_rule() {
@@ -77,11 +77,9 @@ fn build_ast_from_forest(&mut self, statements: Pairs<Rule>) -> Result<Functions
                         match name {
                             VariableCall::ArrayCall(_, _) => return Err(Error::parse(String::from("Array call not allowed in an init statement"), coords)),
                             VariableCall::Name(n) => {
-                                if init_statements.contains_key(&n) {
-                                    return Err(Error::parse(format!("Global variable '{}' is already defined", &n), coords));
-                                }
                                 let expr = self.build_ast_from_expression(init_iter2.next().unwrap())?;
-                                init_statements.insert(n, (coords, type_name, expr));
+                                let init_state = AstStatement::Init { typ: type_name, val: n, expr: expr };
+                                init_statements.push((init_state, coords));
                             }
                         }
                     } else {
