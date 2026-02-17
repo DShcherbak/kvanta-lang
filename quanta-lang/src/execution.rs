@@ -675,15 +675,17 @@ impl Execution {
                             }
                             return Err(Error::runtime(format!("Function {} didn't return a value", name), expr.coords));
                         },
-                        x => Ok(BaseValue { val: x, coords: base_value.coords }),
-                        BaseValueType::ExpandingArray(arr) => {
-                            let change_queue = &mut self.expanded_arrays.lock().unwrap();
-                            if let Some(true_value) = change_queue.pop_front() {
-                                return Ok(self.calculate_expression(true_value).await?);
+                        BaseValueType::Array(inner_values) => {
+                            let mut results = vec![];
+                            for value in inner_values {
+                                let cs = value.coords;
+                                let temp_expr = Expression{ expr_type: ExpressionType::Value(value), coords: cs};
+                                let executed = self.calculate_expression(temp_expr).await?;
+                                results.push(executed);
                             }
-                            Err(Error::runtime(format!("Couldn't unwrap expanding array"), expr.coords))   
-                            
-                        }
+                            return Ok(BaseValue{val: BaseValueType::Array(results), coords: base_value.coords});
+                        },
+                        x => Ok(BaseValue { val: x, coords: base_value.coords }),
                     }
                 },
                 ExpressionType::Unary(op, inner) => {
@@ -735,7 +737,7 @@ impl Execution {
                         }
                     }
 
-                    Err(Error::runtime(String::from("Unsolvable expression!"), expr.coords))
+                    Err(Error::runtime(format!("Unsolvable expression with values {:?} and {:?}", left_val.val, right_val.val), expr.coords))
                 },
             }
         })
