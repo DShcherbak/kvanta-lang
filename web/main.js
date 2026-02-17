@@ -36,7 +36,7 @@ import { quantaTheme } from "./custom-theme";
 import { drawScript, setup, checkIsCancelled, cancelNow, setIsSafari } from "./canvas-runtime.js";
 
 // WASM glue (wasm-pack output); adjust crate name/path
-import initWasm, { Compiler } from "../quanta-lang/pkg/quanta_lang.js"; 
+import initWasm, { Compiler } from "../legacy/quanta-lang/pkg/quanta_lang.js"; 
 //import { rustHighlighting } from "../grammar/highlight.js";
 
 const runBtn = document.getElementById("runBtn");
