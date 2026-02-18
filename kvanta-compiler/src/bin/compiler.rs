@@ -10,6 +10,7 @@ fn main() {
     let constant = chunk.add_constant(Value::Float(1.2));
     chunk.push_code(OpCode::OpConstant, 0);
     chunk.push(constant as u8, 0);
+    chunk.push_code(OpCode::OpNegate, 0);
     chunk.push_code(OpCode::OpReturn, 123);
     let _ = interpret(Rc::new(chunk));
 }

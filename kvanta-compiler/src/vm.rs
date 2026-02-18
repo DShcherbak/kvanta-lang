@@ -35,6 +35,11 @@ impl VM {
                         else {
                             println!("ERR: NO CONSTANTS");
                         }
+                    },
+                    OpCode::OpNegate => {
+                        match self.pop() {
+                            Value::Float(x) => self.push(Value::Float(-x))
+                        }
                     }
                 }
             } else {

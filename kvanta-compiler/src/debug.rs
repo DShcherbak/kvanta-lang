@@ -31,6 +31,7 @@ pub fn print_instruction(chunk: &Chunk, offset: &mut usize) {
         Some(code) => match code {
             OpCode::OpReturn => simple_instruction(code, offset),
             OpCode::OpConstant => one_arg_instruction(code, chunk, offset),
+            OpCode::OpNegate => simple_instruction(code, offset),
         },
     }
 }
