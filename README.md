@@ -191,6 +191,7 @@ git clone <repo-url>
 cd kvanta-lang
 
 # 2. Compile Rust → WASM
+cd quanta-lang
 wasm-pack build --release --target web
 
 # 3. Install frontend dependencies
