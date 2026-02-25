@@ -144,8 +144,7 @@ export const QuantaLanguage = LRLanguage.define({
 
 
 
-export const quantaCompletion = QuantaLanguage.data.of({
-  autocomplete: completeFromList([
+export const rawCompletionItems = [
     {label: "bool", type: "keyword"},
     {label: "int", type: "keyword"},
     {label: "float", type: "keyword"},
@@ -201,7 +200,10 @@ export const quantaCompletion = QuantaLanguage.data.of({
     {label: "line", type: "function"},
     {label: "setLineColor", type: "function"},
     {label: "setFigureColor", type: "function"},
-  ])
+];
+
+export const quantaCompletion = QuantaLanguage.data.of({
+  autocomplete: completeFromList(rawCompletionItems)
 })
 
 export function quanta() {

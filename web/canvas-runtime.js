@@ -1,3 +1,5 @@
+import { CANVAS_W, CANVAS_H, deg2rad, toPx, tokenize, randomColorString } from './canvas-utils.js';
+
 const logEl  = document.getElementById('logs');
 const drawCanvas = document.getElementById('canvas');
 const drawCtx = drawCanvas.getContext('2d', { alpha: false });
@@ -7,8 +9,6 @@ bufferCanvas.width = 1000;
 const ctx    = bufferCanvas.getContext('2d', { alpha: false });
 let isAnimation = false;
 let isCancelled = false;
-// FIXED SIZE: 1000x1000 logical pixels (scaled for HiDPI once)
-const CANVAS_W = 1000, CANVAS_H = 1000;
 const DPR = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
 
 let randomColors = [];
@@ -54,22 +54,6 @@ function clearCanvas(color = '#0a0f1f') {
   ctx.restore();
 }
 
-function toPx(val, axis) {
-  if (typeof val === 'string' && val.endsWith('%')) {
-    const p = parseFloat(val) / 100;
-    return (axis === 'x' ? CANVAS_W : CANVAS_H) * p;
-  }
-  return +val;
-}
-
-function randomColorString() {
-  const r = Math.floor(255 * Math.random());
-  const g = Math.floor(255 * Math.random());
-  const b = Math.floor(255 * Math.random());
-  return `rgb(${r},${g},${b})`;
-}
-
-const deg2rad = d => (d * Math.PI) / 180;
 function applyStyle(opts){ ctx.lineWidth = opts.width ?? 1; if (opts.stroke) ctx.strokeStyle = opts.stroke; if (opts.fill) ctx.fillStyle = opts.fill; }
 function parseOptions(tokens, startIdx){ 
     const o={}; for(let i=startIdx;i<tokens.length;i++){ 
@@ -95,8 +79,6 @@ function parseOptions(tokens, startIdx){
     }
     return o; 
 }
-function tokenize(line){ return line.trim().split(/\s+/).filter(Boolean); }
-
 function drawCircle(cx, cy, r, o){ ctx.beginPath(); ctx.arc(toPx(cx,'x'), toPx(cy,'y'), toPx(r,'x'), 0, Math.PI*2); if(o.fill) ctx.fill(); if(o.stroke||!o.fill) ctx.stroke(); }
 function drawRect(x,y,w,h,o){ const X=toPx(x,'x'),Y=toPx(y,'y'),W=toPx(w,'x'),H=toPx(h,'y'); if(o.fill) ctx.fillRect(X,Y,W-X,H-Y); if(o.stroke||!o.fill) ctx.strokeRect(X,Y,W-X,H-Y); }
 function drawLine(x1,y1,x2,y2,o){ ctx.beginPath(); ctx.moveTo(toPx(x1,'x'), toPx(y1,'y')); ctx.lineTo(toPx(x2,'x'), toPx(y2,'y')); ctx.stroke(); }
