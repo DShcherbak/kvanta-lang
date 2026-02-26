@@ -74,9 +74,8 @@
 
 import {parser} from "../grammar/grammar.js";
 import {LRLanguage, LanguageSupport, indentNodeProp, foldNodeProp, foldInside, delimitedIndent, HighlightStyle, syntaxHighlighting} from "@codemirror/language"
-import {highlightCode, highlightTree, styleTags, tags as t} from "@lezer/highlight"
+import {styleTags, tags as t} from "@lezer/highlight"
 import {completeFromList} from "@codemirror/autocomplete"
-import { rustHighlighting } from "../grammar/highlight.js";
 
 export const quantaHighlightStyle = HighlightStyle.define([
   // keywords
@@ -139,67 +138,97 @@ export const QuantaLanguage = LRLanguage.define({
   }
 })
 
-
-
-
-
-
 export const rawCompletionItems = [
-    {label: "bool", type: "keyword"},
-    {label: "int", type: "keyword"},
-    {label: "float", type: "keyword"},
-    {label: "Color", type: "keyword"},
-     {label: "Red", type: "keyword"},
-  {label: "DarkRed", type: "keyword"},
-  {label: "LightRed", type: "keyword"},
+  {label: "bool", type: "type"},
+  {label: "int", type: "type"},
+  {label: "float", type: "type"},
 
-  {label: "Green", type: "keyword"},
-  {label: "DarkGreen", type: "keyword"},
-  {label: "LightGreen", type: "keyword"},
+  {label: "string", type: "type"},
+  {label: "array", type: "type"},
 
-  {label: "Blue", type: "keyword"},
-  {label: "DarkBlue", type: "keyword"},
-  {label: "LightBlue", type: "keyword"},
+  {label: "Color", type: "enum"},
 
-  {label: "Yellow", type: "keyword"},
-  {label: "DarkYellow", type: "keyword"},
-  {label: "LightYellow", type: "keyword"},
+  {label: "Red", type: "property"},
+  {label: "DarkRed", type: "property"},
+  {label: "LightRed", type: "property"},
 
-  {label: "Orange", type: "keyword"},
-  {label: "DarkOrange", type: "keyword"},
-  {label: "LightOrange", type: "keyword"},
+  {label: "Green", type: "property"},
+  {label: "DarkGreen", type: "property"},
+  {label: "LightGreen", type: "property"},
 
-  {label: "Pink", type: "keyword"},
-  {label: "LightPink", type: "keyword"},
-  {label: "HotPink", type: "keyword"},
+  {label: "Blue", type: "property"},
+  {label: "DarkBlue", type: "property"},
+  {label: "LightBlue", type: "property"},
 
-  {label: "Purple", type: "keyword"},
-  {label: "Violet", type: "keyword"},
-  {label: "DarkViolet", type: "keyword"},
-  {label: "LightViolet", type: "keyword"},
+  {label: "Yellow", type: "property"},
+  {label: "DarkYellow", type: "property"},
+  {label: "LightYellow", type: "property"},
 
-  {label: "Brown", type: "keyword"},
-  {label: "DarkBrown", type: "keyword"},
-  {label: "LightBrown", type: "keyword"},
+  {label: "Orange", type: "property"},
+  {label: "DarkOrange", type: "property"},
+  {label: "LightOrange", type: "property"},
 
-  {label: "Cyan", type: "keyword"},
-  {label: "DarkCyan", type: "keyword"},
-  {label: "LightCyan", type: "keyword"},
+  {label: "Pink", type: "property"},
+  {label: "LightPink", type: "property"},
+  {label: "HotPink", type: "property"},
 
-  {label: "Black", type: "keyword"},
-  {label: "Gray", type: "keyword"},
-  {label: "DarkGray", type: "keyword"},
-  {label: "LightGray", type: "keyword"},
-  {label: "White", type: "keyword"},
-  {label: "Background", type: "keyword"},
-  {label: "Transparent", type: "keyword"},
-  {label: "Random", type: "keyword"},
+  {label: "Purple", type: "property"},
+  {label: "Violet", type: "property"},
+  {label: "DarkViolet", type: "property"},
+  {label: "LightViolet", type: "property"},
 
-    {label: "circle", type: "function"},
-    {label: "rectangle", type: "function"},
-    {label: "line", type: "function"},
-    {label: "setLineColor", type: "function"},
-    {label: "setFigureColor", type: "function"},
+  {label: "Brown", type: "property"},
+  {label: "DarkBrown", type: "property"},
+  {label: "LightBrown", type: "property"},
+
+  {label: "Cyan", type: "property"},
+  {label: "DarkCyan", type: "property"},
+  {label: "LightCyan", type: "property"},
+
+  {label: "Black", type: "property"},
+  {label: "Gray", type: "property"},
+  {label: "DarkGray", type: "property"},
+  {label: "LightGray", type: "property"},
+  {label: "White", type: "property"},
+  {label: "Background", type: "property"},
+  {label: "Transparent", type: "property"},
+  {label: "Random", type: "property"},
+
+  {label: "circle", type: "function"},
+  {label: "rectangle", type: "function"},
+  {label: "line", type: "function"},
+  {label: "polygon", type: "function"},
+  {label: "arc", type: "function"},
+
+  {label: "setLineColor", type: "function"},
+  {label: "setFigureColor", type: "function"},
+  {label: "setLineWidth", type: "function"},
+
+  {label: "sleep", type: "function"},
+  {label: "animate", type: "function"},
+  {label: "frame", type: "function"},
+  {label: "clear", type: "function"},
+
+  {label: "rgb", type: "function"},
+  {label: "round", type: "function"},
+  {label: "decimal", type: "function"},
+  {label: "ceil", type: "function"},
+  {label: "floor", type: "function"},
+  {label: "abs", type: "function"},
+  {label: "sqrt", type: "function"},
+  {label: "random", type: "function"},
+  {label: "print", type: "function"},
+
+  {label: "for", type: "keyword"},
+  {label: "while", type: "keyword"},
+  {label: "global", type: "keyword"},
+  {label: "func", type: "keyword"},
+  
+  {label: "if", type: "keyword"},
+  {label: "else", type: "keyword"},
+
+  {label: "true", type: "property"},
+  {label: "false", type: "property"},
 ];
 
 export const quantaCompletion = QuantaLanguage.data.of({

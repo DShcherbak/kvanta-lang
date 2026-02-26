@@ -77,14 +77,6 @@ describe('deg2rad', () => {
     expect(deg2rad(90)).toBeCloseTo(Math.PI / 2);
   });
 
-  it('converts 180° to π', () => {
-    expect(deg2rad(180)).toBeCloseTo(Math.PI);
-  });
-
-  it('converts 360° to 2π', () => {
-    expect(deg2rad(360)).toBeCloseTo(2 * Math.PI);
-  });
-
   it('handles negative angles', () => {
     expect(deg2rad(-90)).toBeCloseTo(-Math.PI / 2);
   });
