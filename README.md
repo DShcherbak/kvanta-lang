@@ -19,14 +19,15 @@ Run the above directly — no functions needed for simple scripts.
 
 ### Data Types
 
-| Type | Example |
-|------|---------|
-| `int` | `int x = 42;` |
-| `float` | `float ratio = 2.3;` |
-| `bool` | `bool on = true;` |
-| `color` | `color c = Color::Green;` |
-| `string` | `string s = "hello";` |
+
+| Type          | Example                                 |
+| ------------- | --------------------------------------- |
+| `int`         | `int x = 42;`                           |
+| `float`       | `float ratio = 2.3;`                    |
+| `bool`        | `bool on = true;`                       |
+| `string`      | `string s = "hello";`                   |
 | `array<T, N>` | `array<int, 5> nums = {1, 2, 3, 4, 5};` |
+
 
 Arrays can be nested: `array<array<int, 3>, 3> grid = { {0,1,2}, {3,4,5}, {6,7,8} };`
 
@@ -248,3 +249,4 @@ kvanta-lang/
 - **CodeMirror 6** — code editor with syntax highlighting and autocomplete
 - **Vite** — frontend build tool and dev server
 - **HTML5 Canvas** — rendering target
+
