@@ -167,7 +167,6 @@ func main() {
 func main() {
     animate();
     for i in (0..360) {
-        background(Color::Black);
         setFigureColor(Color::Red);
         circle(500 + round(decimal(i) * 3.14159 / 180.0 * 200.0), 500, 30);
         frame();
