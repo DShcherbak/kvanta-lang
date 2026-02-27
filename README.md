@@ -8,9 +8,8 @@ The canvas is 1000×1000 virtual pixels and scales responsively to the window si
 
 ```
 # Draw a red circle
-circle(500, 500, 200);
 setFigureColor(Color::Red);
-rectangle(320, 240, 420, 340);
+circle(500, 500, 200);
 ```
 
 Run the above directly — no functions needed for simple scripts.
@@ -25,6 +24,7 @@ Run the above directly — no functions needed for simple scripts.
 | `int`         | `int x = 42;`                           |
 | `float`       | `float ratio = 2.3;`                    |
 | `bool`        | `bool on = true;`                       |
+| `color`       | `color c = Color::Green;`               |
 | `string`      | `string s = "hello";`                   |
 | `array<T, N>` | `array<int, 5> nums = {1, 2, 3, 4, 5};` |
 
@@ -45,7 +45,6 @@ polygon(x1, y1, x2, y2, x3, y3, ..)-- polygon from N >= 3 points
 setFigureColor(Color::Red)          -- fill color (default: white)
 setLineColor(Color::Blue)           -- stroke color (default: black)
 setLineWidth(3)                     -- line width in pixels (default: 1)
-background(Color::Black)            -- fill the canvas with a color
 ```
 
 ### Colors
@@ -55,7 +54,7 @@ Color::Red, Color::Green, Color::Blue, Color::Yellow,
 Color::Pink, Color::White, Color::Black, ...
 Color::Random                       -- random color
 rgb(r, g, b)                        -- custom color from components
-Transparent                         -- no fill / transparent
+Color::Transparent                  -- no fill / transparent
 ```
 
 ### Math Functions
@@ -132,7 +131,7 @@ func mouse(int x, int y) {
 func keyboard(int key) {
     -- called on keypress when canvas is focused
     if (key == Key::Space) { ... }
-    if (key == Key::As) { ... }    -- 'A' key, etc.
+    if (key == Key::A) { ... }    -- 'A' key, etc.
 }
 ```
 
@@ -202,14 +201,6 @@ npm run dev
 ```
 
 Then open [http://localhost:5173](http://localhost:5173).
-
-### Grammar Development (optional)
-
-```bash
-cd grammar
-tree-sitter generate
-tree-sitter parse test.txt
-```
 
 ## Project Structure
 
