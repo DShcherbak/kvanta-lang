@@ -9,6 +9,16 @@ struct VM {
     stack: Vec<Value>
 }
 
+// Accepts an operator, pops two values from the stack, applies the operator, and pushes the result back on the stack.
+macro_rules! binary_op {
+    ($s:expr, $op:tt) => {
+        match ($s.pop(), $s.pop()) {
+            (Value::Float(b), Value::Float(a)) => $s.push(Value::Float(a $op b)),
+            //_ => println!("ERR: OPERAND TYPE MISMATCH")
+        }
+    };
+}
+
 pub enum InterpretResult {
     Ok,
     CompileError,
@@ -40,7 +50,12 @@ impl VM {
                         match self.pop() {
                             Value::Float(x) => self.push(Value::Float(-x))
                         }
-                    }
+                    },
+                    OpCode::OpAdd => binary_op!(self, +),
+                    OpCode::OpSubtract => binary_op!(self, -),
+                    OpCode::OpMultiply => binary_op!(self, *),
+                    OpCode::OpDivide => binary_op!(self, /),
+
                 }
             } else {
                 println!("ERR: END OF EXECUTION");

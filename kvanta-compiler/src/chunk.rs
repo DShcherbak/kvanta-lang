@@ -7,7 +7,11 @@ use std::ops::Index;
 pub enum OpCode {
     OpReturn = 0,
     OpConstant = 1,
-    OpNegate = 2
+    OpNegate = 2,
+    OpAdd = 3,
+    OpSubtract = 4,
+    OpMultiply = 5,
+    OpDivide = 6
 }
 
 pub fn from(value: u8) -> Option<OpCode> {

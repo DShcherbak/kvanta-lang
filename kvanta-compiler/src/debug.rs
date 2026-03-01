@@ -32,6 +32,10 @@ pub fn print_instruction(chunk: &Chunk, offset: &mut usize) {
             OpCode::OpReturn => simple_instruction(code, offset),
             OpCode::OpConstant => one_arg_instruction(code, chunk, offset),
             OpCode::OpNegate => simple_instruction(code, offset),
+            OpCode::OpAdd => simple_instruction(code, offset),
+            OpCode::OpSubtract => simple_instruction(code, offset),
+            OpCode::OpMultiply => simple_instruction(code, offset),
+            OpCode::OpDivide => simple_instruction(code, offset),
         },
     }
 }
