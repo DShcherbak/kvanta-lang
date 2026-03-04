@@ -15,11 +15,13 @@
 //     let _ = interpret(Rc::new(chunk));
 // }
 
-struct Scanner {
+use crate::chunk::Chunk;
+
+struct Scanner<'comp> {
     start: usize,
     current: usize,
     line: u32,
-    source: String,
+    source: &'comp str,
     line_size: usize,
 }
 
@@ -74,7 +76,7 @@ enum TokenType {
     Error
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Token<'a> {
     token_type: TokenType,
     lexeme: &'a str,
@@ -83,8 +85,8 @@ struct Token<'a> {
 
 
 
-impl Scanner {
-    fn make_token<'a>(&'a self, token_type: TokenType) -> Token<'a> {
+impl<'comp> Scanner<'comp> {
+    fn make_token(&self, token_type: TokenType) -> Token<'comp> {
         Token {
             token_type,
             lexeme: &self.source[self.start..self.current],
@@ -92,7 +94,7 @@ impl Scanner {
         }
     }
 
-    fn error_token<'a>(&self, message: &'a str) -> Token<'a> {
+    fn error_token(&self, message: &'static str) -> Token<'static> {
         Token {
             token_type: TokenType::Error,
             lexeme: message,
@@ -195,7 +197,7 @@ impl Scanner {
         }
     }
 
-    fn scan_token(&mut self) -> Token<'_> {
+    fn scan_token(&mut self) -> Token<'comp> {
         self.skip_whitespace();
         self.start = self.current;
 
@@ -286,30 +288,108 @@ impl Scanner {
         self.current += 1;
         c
     }
+
+    fn new(source: &str) -> Self {
+        Scanner {
+            start: 0,
+            current: 0,
+            line: 1,
+            source,
+            line_size: source.len(),
+        }
+    }
 }
 
-pub fn compile(source: String){
-    let n = source.len();
-    let mut scanner = Scanner {
-        start: 0,
-        current: 0,
-        line: 1,
-        source,
-        line_size: n,
+struct Parser<'comp> {
+    current: Token<'comp>,
+    previous: Token<'comp>,
+    scanner: Scanner<'comp>,
+    had_error: bool,
+    panic_mode: bool,
+}
+
+impl<'comp> Parser<'comp> {
+    fn error_at_current(&mut self, message: &str) {
+        if self.panic_mode {
+            return;
+        }
+        self.panic_mode = true;
+        let cur = self.current.clone();
+        self.error_at(&cur, message);
+    }
+
+    fn error_at(&mut self, token: &Token, message: &str) {
+        eprint!("[line {}] Error", token.line);
+        if token.token_type == TokenType::Eof {
+            eprint!(" at end");
+        } else if token.token_type == TokenType::Error {
+            // Nothing.
+        } else {
+            eprint!(" at '{}'", token.lexeme);
+        }
+        eprintln!(": {}", message);
+        self.had_error = true;
+    }
+
+    fn advance(&mut self, scanner: &'comp mut Scanner<'comp>) {
+        self.previous = self.current.clone();
+        loop {
+            self.current = scanner.scan_token();
+            if self.current.token_type != TokenType::Error {
+                break;
+            }
+            self.error_at_current(&self.current.lexeme);
+        }
+    }
+
+    fn consume(&mut self, token_type: TokenType, message: &str, scanner: &'comp mut Scanner<'comp>) {
+        if self.current.token_type == token_type {
+            self.advance(scanner);
+            return;
+        }
+        self.error_at_current(message);
+    }
+}
+
+pub fn compile(source: String) -> Result<Chunk, String> {
+    let mut scanner = Scanner::new(&source);
+
+    let dummy_token = Token {
+        token_type: TokenType::Eof,
+        lexeme: "",
+        line: 0,
     };
+
+    let mut parser = Parser {
+        current: dummy_token.clone(),
+        previous: dummy_token,
+        had_error: false,
+        panic_mode: false,
+    };
+
+    parser.advance(&mut scanner);
+    
     let mut line : u32 = 0;
 
     loop {
         let token = scanner.scan_token();
-        if token.line != line {
-            line = token.line;
+        let token_type = token.token_type.clone();
+        let token_line = token.line;
+        if token_line != line {
+            line = token_line;
             println!("LINE: {}", line);
         } else {
             println!("     |");
         }
         println!("{:?}", token);
-        if token.token_type == TokenType::Eof {
+        if token_type == TokenType::Eof {
             break;
         } 
+    }
+
+    if parser.had_error {
+        Err("Compilation failed".to_string())
+    } else {
+        Ok(Chunk::new())
     }
 }

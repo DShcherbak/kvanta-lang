@@ -4,8 +4,16 @@ use kvanta_compiler::vm::InterpretResult;
 use kvanta_compiler::compiler::compile;
 
 fn interpret(source: String) -> InterpretResult {
-    compile(source);
-    InterpretResult::Ok
+    match compile(source) {
+        Err(error) => {
+            println!("Compile error: {}", error);
+            InterpretResult::CompileError
+        }
+        Ok(chunk) => {
+            let vm = VM {chunk: Rc::new(chunk), ip: 0, stack: vec![]};
+            vm.run()
+        },
+    }
 }
 
 fn repl() {
