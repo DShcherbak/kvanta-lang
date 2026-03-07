@@ -16,3 +16,20 @@ Installation instructions:
 4. Launch index.html on localhost: in root directory "py -m http.server"
 
 5. Go to 127.0.0.1:8000 and enjoy)
+
+## Running web runtime tests
+
+Install dependencies first (only needed once):
+```
+npm install
+```
+
+Run all unit tests once:
+```
+npm test
+```
+
+Run in watch mode (re-runs on file save):
+```
+npm run test:watch
+```
