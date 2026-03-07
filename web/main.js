@@ -135,7 +135,7 @@ const newlineSameIndent = keymap.of([{
  * @param {import("@codemirror/view").EditorView} editor - The active EditorView.
  * @param {{ start_row: number, start_column: number, end_row: number, end_column: number, get_error_message(): string }} err
  */
-function showError(editor, err) {
+export function showError(editor, err) {
   let diagnostics = [];
   const from_line = editor.state.doc.line(Math.max(1, err.start_row));
   const from = Math.min(from_line.to, from_line.from + err.start_column);
@@ -157,7 +157,7 @@ function showError(editor, err) {
  *
  * @param {{ start_row: number, start_column: number, end_row: number, end_column: number, get_error_message(): string }} err
  */
-function alertError(err) {
+export function alertError(err) {
     console.log("Error:" + err.get_error_message() + " at "
         + err.start_row + ":" + err.start_column
         + " - " + err.end_row + ":" + err.end_column);
@@ -169,7 +169,7 @@ function alertError(err) {
  *
  * @param {import("@codemirror/view").EditorView} editor
  */
-function showOk(editor) {
+export function showOk(editor) {
   editor.dispatch(setDiagnostics(editor.state, []));
 }
 
@@ -274,7 +274,7 @@ const onTyping = EditorView.updateListener.of(update => {
  * @param {number} sizePx - Font size in pixels.
  * @returns {import("@codemirror/view").Extension}
  */
-function fontSizeTheme(sizePx) {
+export function fontSizeTheme(sizePx) {
   return EditorView.theme({
     ".cm-content": { fontSize: sizePx + "px" },
     ".cm-line":    { fontSize: sizePx + "px" },
@@ -419,7 +419,7 @@ function clearErrors() {
  * @param {number} ms
  * @returns {Promise<void>}
  */
-function sleep(ms) {
+export function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
@@ -646,7 +646,7 @@ document.getElementById("canvas").addEventListener('click', (e) => {
  * @param {string} filename - Suggested download filename.
  * @param {string} text     - File contents.
  */
-function downloadFile(filename, text) {
+export function downloadFile(filename, text) {
   const blob = new Blob([text], { type: "text/plain" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
