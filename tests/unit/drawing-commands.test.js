@@ -7,11 +7,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { drawScript, cancelNow } from '../../web/canvas-runtime.js';
 
-const ctx = globalThis.__mockCtx;
+const bufferCtx = globalThis.__mockBufferCtx;
+const drawCtx = globalThis.__mockDrawCtx;
 
 function clearMocks() {
-  for (const v of Object.values(ctx)) {
-    if (typeof v?.mockClear === 'function') v.mockClear();
+  for (const target of [bufferCtx, drawCtx]) {
+    for (const v of Object.values(target)) {
+      if (typeof v?.mockClear === 'function') v.mockClear();
+    }
   }
 }
 
@@ -24,14 +27,14 @@ beforeEach(() => {
 // circle
 // ---------------------------------------------------------------------------
 describe('drawScript – circle', () => {
-  it('calls ctx.arc once', () => {
+  it('calls bufferCtx.arc once', () => {
     drawScript(['circle 500 500 100']);
-    expect(ctx.arc).toHaveBeenCalledOnce();
+    expect(bufferCtx.arc).toHaveBeenCalledOnce();
   });
 
   it('passes correct centre and radius to arc', () => {
     drawScript(['circle 200 300 50']);
-    const [cx, cy, r] = ctx.arc.mock.calls[0];
+    const [cx, cy, r] = bufferCtx.arc.mock.calls[0];
     expect(cx).toBe(200);
     expect(cy).toBe(300);
     expect(r).toBe(50);
@@ -39,18 +42,18 @@ describe('drawScript – circle', () => {
 
   it('strokes by default (no fill option)', () => {
     drawScript(['circle 500 500 100']);
-    expect(ctx.stroke).toHaveBeenCalled();
-    expect(ctx.fill).not.toHaveBeenCalled();
+    expect(bufferCtx.stroke).toHaveBeenCalled();
+    expect(bufferCtx.fill).not.toHaveBeenCalled();
   });
 
   it('fills when fill option is provided', () => {
     drawScript(['circle 500 500 100 fill=red']);
-    expect(ctx.fill).toHaveBeenCalled();
+    expect(bufferCtx.fill).toHaveBeenCalled();
   });
 
   it('accepts % coordinates', () => {
     drawScript(['circle 50% 50% 10%']);
-    const [cx, cy, r] = ctx.arc.mock.calls[0];
+    const [cx, cy, r] = bufferCtx.arc.mock.calls[0];
     expect(cx).toBe(500);
     expect(cy).toBe(500);
     expect(r).toBe(100);
@@ -63,13 +66,13 @@ describe('drawScript – circle', () => {
 describe('drawScript – rectangle', () => {
   it('calls fillRect when fill option is present', () => {
     drawScript(['rectangle 100 100 300 300 fill=blue']);
-    expect(ctx.fillRect).toHaveBeenCalled();
+    expect(bufferCtx.fillRect).toHaveBeenCalled();
   });
 
   it('calls strokeRect when no fill is given', () => {
     drawScript(['rectangle 100 100 300 300']);
-    expect(ctx.strokeRect).toHaveBeenCalled();
-    expect(ctx.fillRect).not.toHaveBeenCalled();
+    expect(bufferCtx.strokeRect).toHaveBeenCalled();
+    expect(bufferCtx.fillRect).not.toHaveBeenCalled();
   });
 });
 
@@ -79,13 +82,13 @@ describe('drawScript – rectangle', () => {
 describe('drawScript – line', () => {
   it('calls moveTo and lineTo with the correct coordinates', () => {
     drawScript(['line 0 0 100 200']);
-    expect(ctx.moveTo).toHaveBeenCalledWith(0, 0);
-    expect(ctx.lineTo).toHaveBeenCalledWith(100, 200);
+    expect(bufferCtx.moveTo).toHaveBeenCalledWith(0, 0);
+    expect(bufferCtx.lineTo).toHaveBeenCalledWith(100, 200);
   });
 
   it('calls stroke', () => {
     drawScript(['line 0 0 500 500']);
-    expect(ctx.stroke).toHaveBeenCalled();
+    expect(bufferCtx.stroke).toHaveBeenCalled();
   });
 });
 
@@ -95,12 +98,12 @@ describe('drawScript – line', () => {
 describe('drawScript – background', () => {
   it('bg alias clears the canvas', () => {
     drawScript(['bg red']);
-    expect(ctx.fillRect).toHaveBeenCalled();
+    expect(bufferCtx.fillRect).toHaveBeenCalled();
   });
 
   it('background command clears the canvas', () => {
     drawScript(['background #001122']);
-    expect(ctx.fillRect).toHaveBeenCalled();
+    expect(bufferCtx.fillRect).toHaveBeenCalled();
   });
 });
 
@@ -110,7 +113,7 @@ describe('drawScript – background', () => {
 describe('drawScript – clear', () => {
   it('calls fillRect (resets canvas to default color)', () => {
     drawScript(['clear']);
-    expect(ctx.fillRect).toHaveBeenCalled();
+    expect(bufferCtx.fillRect).toHaveBeenCalled();
   });
 });
 
@@ -120,17 +123,17 @@ describe('drawScript – clear', () => {
 describe('drawScript – blank and comment lines', () => {
   it('ignores empty lines', () => {
     drawScript(['', '   ', 'circle 500 500 50']);
-    expect(ctx.arc).toHaveBeenCalledOnce();
+    expect(bufferCtx.arc).toHaveBeenCalledOnce();
   });
 
   it('ignores // comment lines', () => {
     drawScript(['// this is a comment', 'circle 500 500 50']);
-    expect(ctx.arc).toHaveBeenCalledOnce();
+    expect(bufferCtx.arc).toHaveBeenCalledOnce();
   });
 
   it('ignores // a valid lines under the comment', () => {
     drawScript(['//circle 500 500 50']);
-    expect(ctx.arc).not.toHaveBeenCalled();
+    expect(bufferCtx.arc).not.toHaveBeenCalled();
   });
 });
 
@@ -141,8 +144,8 @@ describe('drawScript – cancellation', () => {
   it('skips all commands when already cancelled', () => {
     cancelNow(true);
     drawScript(['circle 500 500 100', 'rectangle 0 0 100 100']);
-    expect(ctx.arc).not.toHaveBeenCalled();
-    expect(ctx.fillRect).not.toHaveBeenCalled();
+    expect(bufferCtx.arc).not.toHaveBeenCalled();
+    expect(bufferCtx.fillRect).not.toHaveBeenCalled();
   });
 });
 
@@ -156,7 +159,7 @@ describe('drawScript – unknown commands', () => {
 
   it('continues processing after an unknown command', () => {
     drawScript(['unknowncommand 0 0 0', 'circle 500 500 50']);
-    expect(ctx.arc).toHaveBeenCalledOnce();
+    expect(bufferCtx.arc).toHaveBeenCalledOnce();
   });
 });
 
@@ -170,7 +173,7 @@ describe('drawScript – multiple commands', () => {
       'circle 200 200 50',
       'circle 300 300 50',
     ]);
-    expect(ctx.arc).toHaveBeenCalledTimes(3);
+    expect(bufferCtx.arc).toHaveBeenCalledTimes(3);
   });
 });
 
@@ -180,31 +183,31 @@ describe('drawScript – multiple commands', () => {
 describe('drawScript – polygon', () => {
   it('calls beginPath and closePath', () => {
     drawScript(['polygon 0 0 100 0 50 100']);
-    expect(ctx.beginPath).toHaveBeenCalled();
-    expect(ctx.closePath).toHaveBeenCalled();
+    expect(bufferCtx.beginPath).toHaveBeenCalled();
+    expect(bufferCtx.closePath).toHaveBeenCalled();
   });
 
   it('calls moveTo for first point and lineTo for subsequent points', () => {
     drawScript(['polygon 10 20 30 40 50 60']);
-    expect(ctx.moveTo).toHaveBeenCalledWith(10, 20);
-    expect(ctx.lineTo).toHaveBeenCalledWith(30, 40);
-    expect(ctx.lineTo).toHaveBeenCalledWith(50, 60);
+    expect(bufferCtx.moveTo).toHaveBeenCalledWith(10, 20);
+    expect(bufferCtx.lineTo).toHaveBeenCalledWith(30, 40);
+    expect(bufferCtx.lineTo).toHaveBeenCalledWith(50, 60);
   });
 
   it('strokes by default', () => {
     drawScript(['polygon 0 0 100 0 50 100']);
-    expect(ctx.stroke).toHaveBeenCalled();
-    expect(ctx.fill).not.toHaveBeenCalled();
+    expect(bufferCtx.stroke).toHaveBeenCalled();
+    expect(bufferCtx.fill).not.toHaveBeenCalled();
   });
 
   it('fills when fill option is provided', () => {
     drawScript(['polygon 0 0 100 0 50 100 fill=green']);
-    expect(ctx.fill).toHaveBeenCalled();
+    expect(bufferCtx.fill).toHaveBeenCalled();
   });
 
   it('does nothing when fewer than 4 numbers (less than 2 points) are given', () => {
     drawScript(['polygon 100 200']);
-    expect(ctx.beginPath).not.toHaveBeenCalled();
+    expect(bufferCtx.beginPath).not.toHaveBeenCalled();
   });
 });
 
@@ -212,14 +215,14 @@ describe('drawScript – polygon', () => {
 // arc
 // ---------------------------------------------------------------------------
 describe('drawScript – arc', () => {
-  it('calls ctx.arc once', () => {
+  it('calls bufferCtx.arc once', () => {
     drawScript(['arc 500 500 100 0 90']);
-    expect(ctx.arc).toHaveBeenCalledOnce();
+    expect(bufferCtx.arc).toHaveBeenCalledOnce();
   });
 
   it('passes correct centre and radius', () => {
     drawScript(['arc 200 300 50 0 180']);
-    const [cx, cy, r] = ctx.arc.mock.calls[0];
+    const [cx, cy, r] = bufferCtx.arc.mock.calls[0];
     expect(cx).toBe(200);
     expect(cy).toBe(300);
     expect(r).toBe(50);
@@ -227,31 +230,31 @@ describe('drawScript – arc', () => {
 
   it('converts start and end angles from degrees to radians', () => {
     drawScript(['arc 500 500 100 0 180']);
-    const [, , , a0, a1] = ctx.arc.mock.calls[0];
+    const [, , , a0, a1] = bufferCtx.arc.mock.calls[0];
     expect(a0).toBeCloseTo(0);
     expect(a1).toBeCloseTo(Math.PI);
   });
 
   it('strokes by default', () => {
     drawScript(['arc 500 500 100 0 90']);
-    expect(ctx.stroke).toHaveBeenCalled();
-    expect(ctx.fill).not.toHaveBeenCalled();
+    expect(bufferCtx.stroke).toHaveBeenCalled();
+    expect(bufferCtx.fill).not.toHaveBeenCalled();
   });
 
   it('fills when fill option is provided', () => {
     drawScript(['arc 500 500 100 0 90 fill=red']);
-    expect(ctx.fill).toHaveBeenCalled();
+    expect(bufferCtx.fill).toHaveBeenCalled();
   });
 
   it('passes ccw=true when ccw option is set', () => {
     drawScript(['arc 500 500 100 0 90 ccw=true']);
-    const [, , , , , ccw] = ctx.arc.mock.calls[0];
+    const [, , , , , ccw] = bufferCtx.arc.mock.calls[0];
     expect(ccw).toBe(true);
   });
 
   it('passes ccw=false when ccw option is absent', () => {
     drawScript(['arc 500 500 100 0 90']);
-    const [, , , , , ccw] = ctx.arc.mock.calls[0];
+    const [, , , , , ccw] = bufferCtx.arc.mock.calls[0];
     expect(ccw).toBe(false);
   });
 });
@@ -262,23 +265,23 @@ describe('drawScript – arc', () => {
 describe('drawScript – style options', () => {
   it('width= sets lineWidth on the context', () => {
     drawScript(['circle 500 500 100 width=5']);
-    expect(ctx.lineWidth).toBe(5);
+    expect(bufferCtx.lineWidth).toBe(5);
   });
 
   it('stroke= sets strokeStyle on the context', () => {
     drawScript(['circle 500 500 100 stroke=blue']);
-    expect(ctx.strokeStyle).toBe('blue');
+    expect(bufferCtx.strokeStyle).toBe('blue');
   });
 
   it('fill= sets fillStyle on the context', () => {
     drawScript(['circle 500 500 100 fill=red']);
-    expect(ctx.fillStyle).toBe('red');
+    expect(bufferCtx.fillStyle).toBe('red');
   });
 
   it('calls both fill() and stroke() when both fill= and stroke= are provided', () => {
     drawScript(['circle 500 500 100 fill=red stroke=blue']);
-    expect(ctx.fill).toHaveBeenCalled();
-    expect(ctx.stroke).toHaveBeenCalled();
+    expect(bufferCtx.fill).toHaveBeenCalled();
+    expect(bufferCtx.stroke).toHaveBeenCalled();
   });
 });
 
@@ -288,12 +291,12 @@ describe('drawScript – style options', () => {
 describe('drawScript – rectangle coordinates', () => {
   it('computes width and height from corner coordinates for fillRect', () => {
     drawScript(['rectangle 100 100 300 300 fill=blue']);
-    expect(ctx.fillRect).toHaveBeenCalledWith(100, 100, 200, 200);
+    expect(bufferCtx.fillRect).toHaveBeenCalledWith(100, 100, 200, 200);
   });
 
   it('computes width and height from corner coordinates for strokeRect', () => {
     drawScript(['rectangle 50 50 250 150']);
-    expect(ctx.strokeRect).toHaveBeenCalledWith(50, 50, 200, 100);
+    expect(bufferCtx.strokeRect).toHaveBeenCalledWith(50, 50, 200, 100);
   });
 });
 
@@ -331,19 +334,26 @@ describe('drawScript – error', () => {
 describe('drawScript – compositing', () => {
   it('composites to the visible canvas after a normal script', () => {
     drawScript(['circle 500 500 100']);
-    expect(ctx.drawImage).toHaveBeenCalled();
+    expect(drawCtx.drawImage).toHaveBeenCalled();
   });
 
+
+  it('draws to buffer first, then composites to visible canvas', () => {
+    drawScript(['circle 500 500 100']);
+    expect(bufferCtx.arc).toHaveBeenCalled();
+    expect(drawCtx.arc).not.toHaveBeenCalled();
+    expect(drawCtx.drawImage).toHaveBeenCalledWith(expect.any(HTMLCanvasElement), 0, 0);
+  });
   it('skips compositing in animation mode (no should_draw_frame)', () => {
     drawScript(['animate', 'circle 500 500 100']);
-    expect(ctx.drawImage).not.toHaveBeenCalled();
+    expect(drawCtx.drawImage).not.toHaveBeenCalled();
   });
 
   it('composites when should_draw_frame=true in animation mode', () => {
     drawScript(['animate']);
-    ctx.drawImage.mockClear();
+    drawCtx.drawImage.mockClear();
     drawScript(['circle 500 500 100'], true);
-    expect(ctx.drawImage).toHaveBeenCalled();
+    expect(drawCtx.drawImage).toHaveBeenCalled();
   });
 });
 
@@ -353,18 +363,18 @@ describe('drawScript – compositing', () => {
 describe('drawScript – RandomColor', () => {
   it('same RandomColor index produces the same color on repeated calls', () => {
     drawScript(['circle 100 100 50 fill=RandomColor0']);
-    const firstColor = ctx.fillStyle;
+    const firstColor = bufferCtx.fillStyle;
     clearMocks();
     drawScript(['circle 200 200 50 fill=RandomColor0']);
-    expect(ctx.fillStyle).toBe(firstColor);
+    expect(bufferCtx.fillStyle).toBe(firstColor);
   });
 
   it('different RandomColor indices produce independently stored colors', () => {
     drawScript(['circle 100 100 50 fill=RandomColor5']);
-    const color5 = ctx.fillStyle;
+    const color5 = bufferCtx.fillStyle;
     clearMocks();
     drawScript(['circle 200 200 50 fill=RandomColor6']);
-    const color6 = ctx.fillStyle;
+    const color6 = bufferCtx.fillStyle;
     // Both are valid CSS color strings (rgb format)
     expect(color5).toMatch(/^rgb\(/);
     expect(color6).toMatch(/^rgb\(/);
@@ -379,7 +389,7 @@ describe('drawScript – RandomColor', () => {
     for (let i = 0; i < 20; i++) {
       clearMocks();
       drawScript(['circle 100 100 50 fill=RandomColor']);
-      colors.push(ctx.fillStyle);
+      colors.push(bufferCtx.fillStyle);
     }
     const unique = new Set(colors);
     expect(unique.size).toBeGreaterThan(1);

@@ -48,7 +48,7 @@ fileInput.type = 'file';
 fileInput.id = 'fileInput';
 document.body.appendChild(fileInput);
 
-// ResizeObserver stub – jsdom does not provide this API but CodeMirror 6
+// ResizeObserver stub - jsdom does not provide this API but CodeMirror 6
 // checks for its existence when mounting an EditorView.
 if (typeof globalThis.ResizeObserver === 'undefined') {
   globalThis.ResizeObserver = class ResizeObserver {
@@ -59,33 +59,60 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
 }
 
 // Mock canvas 2D context (jsdom does not implement CanvasRenderingContext2D).
-const mockCtx = {
-  save: vi.fn(),
-  restore: vi.fn(),
-  clearRect: vi.fn(),
-  fillRect: vi.fn(),
-  strokeRect: vi.fn(),
-  beginPath: vi.fn(),
-  arc: vi.fn(),
-  fill: vi.fn(),
-  stroke: vi.fn(),
-  moveTo: vi.fn(),
-  lineTo: vi.fn(),
-  closePath: vi.fn(),
-  drawImage: vi.fn(),
-  setTransform: vi.fn(),
-  getImageData: vi.fn(() => ({ data: [] })),
-  lineJoin: '',
-  lineCap: '',
-  lineWidth: 1,
-  strokeStyle: '',
-  fillStyle: '',
+function createMockCtx() {
+  return {
+    save: vi.fn(),
+    restore: vi.fn(),
+    clearRect: vi.fn(),
+    fillRect: vi.fn(),
+    strokeRect: vi.fn(),
+    beginPath: vi.fn(),
+    arc: vi.fn(),
+    fill: vi.fn(),
+    stroke: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    closePath: vi.fn(),
+    drawImage: vi.fn(),
+    setTransform: vi.fn(),
+    getImageData: vi.fn(() => ({ data: [] })),
+    lineJoin: '',
+    lineCap: '',
+    lineWidth: 1,
+    strokeStyle: '',
+    fillStyle: '',
+  };
+}
+
+const drawCtx = createMockCtx();
+let bufferCtx = null;
+const contextByCanvas = new WeakMap();
+
+/**
+ * Return a stable mocked 2D context per canvas element.
+ * The visible canvas (#canvas) always maps to drawCtx, while each
+ * off-screen canvas gets its own context instance.
+ * The first off-screen context is exposed as __mockBufferCtx.
+ */
+HTMLCanvasElement.prototype.getContext = function getContext() {
+  if (this.id === 'canvas') return drawCtx;
+
+  if (!contextByCanvas.has(this)) {
+    const ctx = createMockCtx();
+    contextByCanvas.set(this, ctx);
+    if (!bufferCtx) {
+      bufferCtx = ctx;
+    }
+  }
+
+  return contextByCanvas.get(this);
 };
 
-HTMLCanvasElement.prototype.getContext = () => mockCtx;
 HTMLCanvasElement.prototype.getBoundingClientRect = () => ({
   width: 500, height: 500, top: 0, left: 0, right: 500, bottom: 500,
 });
 
 // Expose on globalThis so drawing-commands tests can inspect calls.
-globalThis.__mockCtx = mockCtx;
+globalThis.__mockDrawCtx = drawCtx;
+Object.defineProperty(globalThis, '__mockBufferCtx', { get: () => bufferCtx });
+
