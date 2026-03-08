@@ -3,7 +3,7 @@ use crate::value::Value;
 
 use crate::chunk::*;
 
-struct VM {
+pub struct VM {
     chunk: Rc<Chunk>,
     ip: usize,
     stack: Vec<Value>
@@ -26,7 +26,7 @@ pub enum InterpretResult {
 }
 
 impl VM {
-    fn run(&mut self) -> InterpretResult {
+    pub fn run(&mut self) -> InterpretResult {
         loop {
             if let Some(code) = self.chunk.get(self.ip).and_then(|x| from(*x)) {
                 match code {
@@ -72,9 +72,17 @@ impl VM {
     pub fn pop(&mut self) -> Value {
         self.stack.pop().unwrap_or(Value::Float(0.0))
     }
+
+    pub fn new(chunk: Rc<Chunk>) -> Self {
+        Self {
+            chunk,
+            ip: 0,
+            stack: vec![]
+        }
+    }
 }
 
 pub fn interpret(chunk: Rc<Chunk>) -> InterpretResult {
-    let mut vm = VM {chunk, ip: 0, stack: vec![]};
+    let mut vm = VM::new(chunk);
     vm.run()
 }

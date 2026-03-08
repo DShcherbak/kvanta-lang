@@ -15,7 +15,7 @@
 //     let _ = interpret(Rc::new(chunk));
 // }
 
-use crate::chunk::Chunk;
+use crate::{chunk::{Chunk, OpCode}, value::Value};
 
 struct Scanner<'comp> {
     start: usize,
@@ -289,7 +289,7 @@ impl<'comp> Scanner<'comp> {
         c
     }
 
-    fn new(source: &str) -> Self {
+    fn new(source: &'comp str) -> Self {
         Scanner {
             start: 0,
             current: 0,
@@ -306,7 +306,49 @@ struct Parser<'comp> {
     scanner: Scanner<'comp>,
     had_error: bool,
     panic_mode: bool,
+    current_chunk: Chunk,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Precedence {
+    None,
+    Assignment,  // =
+    Or,          // or
+    And,         // and
+    Equality,    // == !=
+    Comparison,   // < > <= >=
+    Term,         // + -
+    Factor,       // * /
+    Unary,        // ! -
+    Call,         // . ()
+    Primary,
+}
+
+impl Precedence {
+    fn next(self) -> Option<Precedence> {
+        match self {
+            Precedence::None => Some(Precedence::Assignment),
+            Precedence::Assignment => Some(Precedence::Or),
+            Precedence::Or => Some(Precedence::And),
+            Precedence::And => Some(Precedence::Equality),
+            Precedence::Equality => Some(Precedence::Comparison),
+            Precedence::Comparison => Some(Precedence::Term),
+            Precedence::Term => Some(Precedence::Factor),
+            Precedence::Factor => Some(Precedence::Unary),
+            Precedence::Unary => Some(Precedence::Call),
+            Precedence::Call => Some(Precedence::Primary),
+            Precedence::Primary => None,
+        }
+    }
+}
+
+struct ParseRule {
+    prefix: Option<fn(&mut Parser)>,
+    infix: Option<fn(&mut Parser)>,
+    precedence: Precedence,
+}
+
+
 
 impl<'comp> Parser<'comp> {
     fn error_at_current(&mut self, message: &str) {
@@ -331,65 +373,157 @@ impl<'comp> Parser<'comp> {
         self.had_error = true;
     }
 
-    fn advance(&mut self, scanner: &'comp mut Scanner<'comp>) {
+    fn advance(&mut self) {
         self.previous = self.current.clone();
         loop {
-            self.current = scanner.scan_token();
+            self.current = self.scanner.scan_token();
             if self.current.token_type != TokenType::Error {
                 break;
             }
-            self.error_at_current(&self.current.lexeme);
+            self.error_at_current(self.current.lexeme);
         }
     }
 
-    fn consume(&mut self, token_type: TokenType, message: &str, scanner: &'comp mut Scanner<'comp>) {
+    fn consume(&mut self, token_type: TokenType, message: &str) {
         if self.current.token_type == token_type {
-            self.advance(scanner);
+            self.advance();
             return;
         }
         self.error_at_current(message);
     }
+
+    fn emit_byte(&mut self, byte: u8) {
+        self.current_chunk.push(byte, self.previous.line);
+    }
+
+    fn emit_bytes(&mut self, byte1: u8, byte2: u8) {
+        self.emit_byte(byte1);
+        self.emit_byte(byte2);
+    }
+
+    fn emit_constant(&mut self, value: f32) {
+        let constant = self.current_chunk.add_constant(Value::Float(value));
+        if constant > u8::MAX as usize {
+            self.error_at_current("Too many constants in one chunk.");
+            return;
+        }
+        self.emit_bytes(OpCode::OpConstant as u8, constant as u8);
+    }
+
+
+    fn new(scanner: Scanner<'comp>) -> Self {
+        let dummy_token = Token {
+            token_type: TokenType::Eof,
+            lexeme: "",
+            line: 0,
+        };
+
+        Parser {
+            current: dummy_token.clone(),
+            previous: dummy_token,
+            had_error: false,
+            panic_mode: false,
+            scanner,
+            current_chunk: Chunk::new(),
+        }
+    }
+
+    fn end_compile(&mut self) {
+        self.consume(TokenType::Eof, "Expect end of expression.");
+        self.emit_byte(OpCode::OpReturn as u8); // OpReturn
+    }
+
+    fn expression(&mut self) {
+        self.parse_precedence(Precedence::Assignment);
+    }
+
+    fn number(&mut self) {
+        let value = self.previous.lexeme.parse::<f32>().unwrap();
+        self.emit_constant(value);
+    }
+
+    fn grouping(&mut self) {
+        self.expression();
+        self.consume(TokenType::RightParen, "Expect ')' after expression.");
+    }
+
+    fn unary(&mut self) {
+        let operator_type = self.previous.token_type.clone();
+        self.parse_precedence(Precedence::Unary);
+        if operator_type == TokenType::Minus {
+            self.emit_byte(OpCode::OpNegate as u8);
+        }
+        // match operator_type {
+        //     TokenType::Minus => self.emit_byte(OpCode::OpNegate as u8),
+        //     _ => (),
+        // }
+    }
+   
+
+    fn parse_precedence(&mut self, precedence: Precedence) {
+        self.advance();
+        let prefix_rule = get_rule(self.previous.token_type.clone()).prefix;
+        if let Some(prefix_rule) = prefix_rule {
+            prefix_rule(self);
+        } else {
+            self.error_at_current("Expect expression.");
+            return;
+        }
+
+        while precedence <= get_rule(self.current.token_type.clone()).precedence {
+            self.advance();
+            let infix_rule = get_rule(self.previous.token_type.clone()).infix;
+            if let Some(infix_rule) = infix_rule {
+                infix_rule(self);
+            }
+        }
+    }
+
+    fn binary(&mut self) {
+        let operator_type = self.previous.token_type.clone();
+        let rule = get_rule(operator_type.clone());
+        self.parse_precedence(rule.precedence.next().unwrap());
+
+        match operator_type {
+            TokenType::Plus => self.emit_byte(OpCode::OpAdd as u8),
+            TokenType::Minus => self.emit_byte(OpCode::OpSubtract as u8),
+            TokenType::Star => self.emit_byte(OpCode::OpMultiply as u8),
+            TokenType::Slash => self.emit_byte(OpCode::OpDivide as u8),
+            _ => (),
+        }
+    }
+}
+
+fn get_rule(token_type: TokenType) -> ParseRule {
+    match token_type {
+        TokenType::LeftParen => ParseRule { prefix: Some(|p| p.grouping()), infix: None, precedence: Precedence::None },
+        TokenType::RightParen => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
+        TokenType::LeftBrace => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
+        TokenType::RightBrace => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
+        TokenType::Comma => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
+        TokenType::Dot => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
+        TokenType::Minus => ParseRule { prefix: Some(|p| p.unary()), infix: Some(|p| p.binary()), precedence: Precedence::Term },
+        TokenType::Plus => ParseRule { prefix: None, infix: Some(|p| p.binary()), precedence: Precedence::Term },
+        TokenType::Semicolon => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
+        TokenType::Slash => ParseRule { prefix: None, infix: Some(|p| p.binary()), precedence: Precedence::Factor },
+        TokenType::Star => ParseRule { prefix: None, infix: Some(|p| p.binary()), precedence: Precedence::Factor },
+        TokenType::Number => ParseRule { prefix: Some(|p| p.number()), infix: None, precedence: Precedence::None },
+        _ => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
+    }
 }
 
 pub fn compile(source: String) -> Result<Chunk, String> {
-    let mut scanner = Scanner::new(&source);
+    let scanner = Scanner::new(&source);
+    let mut parser = Parser::new(scanner);
 
-    let dummy_token = Token {
-        token_type: TokenType::Eof,
-        lexeme: "",
-        line: 0,
-    };
-
-    let mut parser = Parser {
-        current: dummy_token.clone(),
-        previous: dummy_token,
-        had_error: false,
-        panic_mode: false,
-    };
-
-    parser.advance(&mut scanner);
+    parser.advance();
+    parser.expression();
+    parser.end_compile();
     
-    let mut line : u32 = 0;
-
-    loop {
-        let token = scanner.scan_token();
-        let token_type = token.token_type.clone();
-        let token_line = token.line;
-        if token_line != line {
-            line = token_line;
-            println!("LINE: {}", line);
-        } else {
-            println!("     |");
-        }
-        println!("{:?}", token);
-        if token_type == TokenType::Eof {
-            break;
-        } 
-    }
 
     if parser.had_error {
         Err("Compilation failed".to_string())
     } else {
-        Ok(Chunk::new())
+        Ok(parser.current_chunk)
     }
 }

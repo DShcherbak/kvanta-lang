@@ -2,6 +2,9 @@ use std::env;
 
 use kvanta_compiler::vm::InterpretResult;
 use kvanta_compiler::compiler::compile;
+use std::rc::Rc;
+use kvanta_compiler::vm::VM;
+use kvanta_compiler::debug::print;
 
 fn interpret(source: String) -> InterpretResult {
     match compile(source) {
@@ -10,7 +13,9 @@ fn interpret(source: String) -> InterpretResult {
             InterpretResult::CompileError
         }
         Ok(chunk) => {
-            let vm = VM {chunk: Rc::new(chunk), ip: 0, stack: vec![]};
+            // DEBUG
+            print(&chunk, "code");
+            let mut vm = VM::new(Rc::new(chunk));
             vm.run()
         },
     }
