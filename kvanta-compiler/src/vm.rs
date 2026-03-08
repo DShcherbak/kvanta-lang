@@ -6,7 +6,8 @@ use crate::chunk::*;
 pub struct VM {
     chunk: Rc<Chunk>,
     ip: usize,
-    stack: Vec<Value>
+    stack: Vec<Value>,
+    heap: Vec<String>,
 }
 
 // Accepts an operator, pops two values from the stack, applies the operator, and pushes the result back on the stack.
@@ -49,6 +50,15 @@ impl VM {
                 match code {
                     OpCode::Return => {
                         let const_value = self.pop();
+                        if let Value::String(id) = const_value {
+                            if let Some(string) = self.heap.get(id as usize) {
+                                println!("\"{}\"", string);
+                                return InterpretResult::Ok;
+                            } else {
+                                println!("ERR: INVALID STRING ID");
+                                return InterpretResult::RuntimeError;
+                            }
+                        }
                         println!("{:?}", const_value);
                         return InterpretResult::Ok;
                     },
@@ -75,7 +85,29 @@ impl VM {
                             }
                         }
                     },
-                    OpCode::Add => binary_op!(self, +),
+                    OpCode::Add => {
+                        match (self.peek(0), self.peek(1)) {
+                            (Value::Float(b), Value::Float(a)) => {
+                                self.pop();
+                                self.pop();
+                                self.push(Value::Float(a + b));
+                            },
+                            (Value::String(b), Value::String(a)) => {
+                                self.pop();
+                                self.pop();
+                                let a_str = self.heap.get(a as usize);
+                                let b_str = self.heap.get(b as usize);
+                                if let (Some(a_str), Some(b_str)) = (a_str, b_str) {
+                                    let result = a_str.to_string() + b_str;
+                                    let result_id = self.take_string(result);
+                                    self.push(Value::String(result_id));
+                                } else {
+                                    println!("ERR: INVALID STRINGS");
+                                }
+                            },
+                            _ => println!("ERR: OPERANDS MUST BE NUMBERS")
+                        }
+                    },
                     OpCode::Subtract => binary_op!(self, -),
                     OpCode::Multiply => binary_op!(self, *),
                     OpCode::Divide => binary_op!(self, /),
@@ -99,7 +131,7 @@ impl VM {
                         let b = self.peek(1);
                         self.pop();
                         self.pop();
-                        self.push(Value::Boolean(a == b));
+                        self.push(Value::Boolean(self.compare(a,b)));
                     },
                     OpCode::Greater => binary_op_bin!(self, >),
                     OpCode::Less => binary_op_bin!(self, <),
@@ -110,6 +142,32 @@ impl VM {
             }
             self.ip+=1;
         }
+    }
+
+    fn compare(&self, a: Value, b: Value) -> bool {
+        match (a, b) {
+            (Value::Float(x), Value::Float(y)) => x == y,
+            (Value::Boolean(x), Value::Boolean(y)) => x == y,
+            (Value::Nil, Value::Nil) => true,
+            (Value::String(x), Value::String(y)) => {
+                if x == y {
+                    return true;
+                }
+                let x_str = self.heap.get(x as usize);
+                let y_str = self.heap.get(y as usize);
+                if let (Some(x_str), Some(y_str)) = (x_str, y_str) {
+                    x_str == y_str
+                } else {                    
+                    false
+                }
+            },
+            _ => false
+        }
+    }
+
+    pub fn take_string(&mut self, s: String) -> i32 {
+        self.heap.push(s);
+        (self.heap.len() - 1) as i32
     }
 
     pub fn push(&mut self, value: Value) {
@@ -124,11 +182,12 @@ impl VM {
         self.stack.get(self.stack.len() - 1 - distance).unwrap_or(&Value::Float(0.0)).clone()
     }
 
-    pub fn new(chunk: Rc<Chunk>) -> Self {
+    pub fn new(chunk: Rc<Chunk>, heap: Vec<String>) -> Self {
         Self {
             chunk,
             ip: 0,
-            stack: vec![]
+            stack: vec![],
+            heap,
         }
     }
 
@@ -138,7 +197,7 @@ impl VM {
     }
 }
 
-pub fn interpret(chunk: Rc<Chunk>) -> InterpretResult {
-    let mut vm = VM::new(chunk);
+pub fn interpret(chunk: Rc<Chunk>, heap: Vec<String>) -> InterpretResult {
+    let mut vm = VM::new(chunk, heap);
     vm.run()
 }

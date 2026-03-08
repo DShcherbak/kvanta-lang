@@ -307,6 +307,7 @@ struct Parser<'comp> {
     had_error: bool,
     panic_mode: bool,
     current_chunk: Chunk,
+    heap: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -401,8 +402,8 @@ impl<'comp> Parser<'comp> {
         self.emit_byte(byte2);
     }
 
-    fn emit_constant(&mut self, value: f32) {
-        let constant = self.current_chunk.add_constant(Value::Float(value));
+    fn emit_constant(&mut self, value: Value) {
+        let constant = self.current_chunk.add_constant(value);
         if constant > u8::MAX as usize {
             self.error_at_current("Too many constants in one chunk.");
             return;
@@ -425,6 +426,7 @@ impl<'comp> Parser<'comp> {
             panic_mode: false,
             scanner,
             current_chunk: Chunk::new(),
+            heap: vec![],
         }
     }
 
@@ -439,7 +441,17 @@ impl<'comp> Parser<'comp> {
 
     fn number(&mut self) {
         let value = self.previous.lexeme.parse::<f32>().unwrap();
-        self.emit_constant(value);
+        self.emit_constant(Value::Float(value));
+    }
+
+    fn copy_string(&mut self, s: &str) -> i32 {
+        self.heap.push(s[1..s.len() - 1].to_string());
+        (self.heap.len() - 1) as i32
+    }
+
+    fn string(&mut self) {
+        let value = self.copy_string(self.previous.lexeme);
+        self.emit_constant(Value::String(value));
     }
 
     fn literal(&mut self) {
@@ -529,7 +541,7 @@ fn get_rule(token_type: TokenType) -> ParseRule {
         TokenType::Less => ParseRule { prefix: None, infix: Some(|p| p.binary()), precedence: Precedence::Comparison },
         TokenType::LessEqual => ParseRule { prefix: None, infix: Some(|p| p.binary()), precedence: Precedence::Comparison },
         TokenType::Identifier => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
-        TokenType::String => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
+        TokenType::String => ParseRule { prefix: Some(|p| p.string()), infix: None, precedence: Precedence::None },
         TokenType::Number => ParseRule { prefix: Some(|p| p.number()), infix: None, precedence: Precedence::None },
         TokenType::And => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
         TokenType::Class => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
@@ -552,7 +564,7 @@ fn get_rule(token_type: TokenType) -> ParseRule {
     }
 }
 
-pub fn compile(source: String) -> Result<Chunk, String> {
+pub fn compile(source: String) -> Result<(Chunk, Vec<String>), String> {
     let scanner = Scanner::new(&source);
     let mut parser = Parser::new(scanner);
 
@@ -564,6 +576,6 @@ pub fn compile(source: String) -> Result<Chunk, String> {
     if parser.had_error {
         Err("Compilation failed".to_string())
     } else {
-        Ok(parser.current_chunk)
+        Ok((parser.current_chunk, parser.heap))
     }
 }
