@@ -11,7 +11,10 @@ pub enum OpCode {
     OpAdd = 3,
     OpSubtract = 4,
     OpMultiply = 5,
-    OpDivide = 6
+    OpDivide = 6,
+    OpTrue = 7,
+    OpFalse = 8,
+    OpNil = 9
 }
 
 pub fn from(value: u8) -> Option<OpCode> {

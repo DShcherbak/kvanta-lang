@@ -36,6 +36,9 @@ pub fn print_instruction(chunk: &Chunk, offset: &mut usize) {
             OpCode::OpSubtract => simple_instruction(code, offset),
             OpCode::OpMultiply => simple_instruction(code, offset),
             OpCode::OpDivide => simple_instruction(code, offset),
+            OpCode::OpTrue => simple_instruction(code, offset),
+            OpCode::OpFalse => simple_instruction(code, offset),
+            OpCode::OpNil => simple_instruction(code, offset),
         },
     }
 }

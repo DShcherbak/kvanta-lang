@@ -12,9 +12,13 @@ pub struct VM {
 // Accepts an operator, pops two values from the stack, applies the operator, and pushes the result back on the stack.
 macro_rules! binary_op {
     ($s:expr, $op:tt) => {
-        match ($s.pop(), $s.pop()) {
-            (Value::Float(b), Value::Float(a)) => $s.push(Value::Float(a $op b)),
-            //_ => println!("ERR: OPERAND TYPE MISMATCH")
+        match ($s.peek(0), $s.peek(1)) {
+            (Value::Float(b), Value::Float(a)) => {
+                $s.pop();
+                $s.pop();
+                $s.push(Value::Float(a $op b));
+            },
+            _ => println!("ERR: OPERANDS MUST BE NUMBERS")
         }
     };
 }
@@ -47,14 +51,24 @@ impl VM {
                         }
                     },
                     OpCode::OpNegate => {
-                        match self.pop() {
-                            Value::Float(x) => self.push(Value::Float(-x))
+                        match self.peek(0) {
+                            Value::Float(x) => {
+                                self.pop();
+                                self.push(Value::Float(-x))
+                            },
+                            _ => {
+                                self.runtime_error("Operand must be a number.");
+                                return InterpretResult::RuntimeError;
+                            }
                         }
                     },
                     OpCode::OpAdd => binary_op!(self, +),
                     OpCode::OpSubtract => binary_op!(self, -),
                     OpCode::OpMultiply => binary_op!(self, *),
                     OpCode::OpDivide => binary_op!(self, /),
+                    OpCode::OpTrue => self.push(Value::Boolean(true)),
+                    OpCode::OpFalse => self.push(Value::Boolean(false)),
+                    OpCode::OpNil => self.push(Value::Nil),
 
                 }
             } else {
@@ -73,12 +87,20 @@ impl VM {
         self.stack.pop().unwrap_or(Value::Float(0.0))
     }
 
+    pub fn peek(&self, distance: usize) -> Value {
+        self.stack.get(self.stack.len() - 1 - distance).unwrap_or(&Value::Float(0.0)).clone()
+    }
+
     pub fn new(chunk: Rc<Chunk>) -> Self {
         Self {
             chunk,
             ip: 0,
             stack: vec![]
         }
+    }
+
+    fn runtime_error(&self, message: &str) {
+        println!("Runtime error: {}", message);
     }
 }
 
