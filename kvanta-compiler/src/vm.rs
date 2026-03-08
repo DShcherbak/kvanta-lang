@@ -23,6 +23,19 @@ macro_rules! binary_op {
     };
 }
 
+macro_rules! binary_op_bin {
+    ($s:expr, $op:tt) => {
+        match ($s.peek(0), $s.peek(1)) {
+            (Value::Float(b), Value::Float(a)) => {
+                $s.pop();
+                $s.pop();
+                $s.push(Value::Boolean(a $op b));
+            },
+            _ => println!("ERR: OPERANDS MUST BE NUMBERS")
+        }
+    };
+}
+
 pub enum InterpretResult {
     Ok,
     CompileError,
@@ -69,7 +82,27 @@ impl VM {
                     OpCode::OpTrue => self.push(Value::Boolean(true)),
                     OpCode::OpFalse => self.push(Value::Boolean(false)),
                     OpCode::OpNil => self.push(Value::Nil),
-
+                    OpCode::OpNot => {
+                        match self.peek(0) {
+                            Value::Boolean(x) => {
+                                self.pop();
+                                self.push(Value::Boolean(!x))
+                            },
+                            _ => {
+                                self.runtime_error("Operand must be a boolean.");
+                                return InterpretResult::RuntimeError;
+                            }
+                        }
+                    },
+                    OpCode::OpEqual => {
+                        let a = self.peek(0);
+                        let b = self.peek(1);
+                        self.pop();
+                        self.pop();
+                        self.push(Value::Boolean(a == b));
+                    },
+                    OpCode::OpGreater => binary_op_bin!(self, >),
+                    OpCode::OpLess => binary_op_bin!(self, <),
                 }
             } else {
                 println!("ERR: END OF EXECUTION");
@@ -100,7 +133,8 @@ impl VM {
     }
 
     fn runtime_error(&self, message: &str) {
-        println!("Runtime error: {}", message);
+        let instruction = self.chunk.get(self.ip).unwrap_or(&0);
+        println!("Runtime error: {}\n[line {}] in script", message, self.chunk.lines[*instruction as usize]);
     }
 }
 

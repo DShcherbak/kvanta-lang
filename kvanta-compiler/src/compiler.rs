@@ -459,13 +459,11 @@ impl<'comp> Parser<'comp> {
     fn unary(&mut self) {
         let operator_type = self.previous.token_type.clone();
         self.parse_precedence(Precedence::Unary);
-        if operator_type == TokenType::Minus {
-            self.emit_byte(OpCode::OpNegate as u8);
+        match operator_type {
+            TokenType::Minus => self.emit_byte(OpCode::OpNegate as u8),
+            TokenType::Bang => self.emit_byte(OpCode::OpNot as u8),
+            _ => (),
         }
-        // match operator_type {
-        //     TokenType::Minus => self.emit_byte(OpCode::OpNegate as u8),
-        //     _ => (),
-        // }
     }
    
 
@@ -498,6 +496,12 @@ impl<'comp> Parser<'comp> {
             TokenType::Minus => self.emit_byte(OpCode::OpSubtract as u8),
             TokenType::Star => self.emit_byte(OpCode::OpMultiply as u8),
             TokenType::Slash => self.emit_byte(OpCode::OpDivide as u8),
+            TokenType::BangEqual => self.emit_bytes(OpCode::OpEqual as u8, OpCode::OpNot as u8), // TODO: Implement OpNotEqual
+            TokenType::EqualEqual => self.emit_byte(OpCode::OpEqual as u8),
+            TokenType::Greater => self.emit_byte(OpCode::OpGreater as u8),
+            TokenType::GreaterEqual => self.emit_bytes(OpCode::OpLess as u8, OpCode::OpNot as u8),
+            TokenType::Less => self.emit_byte(OpCode::OpLess as u8),
+            TokenType::LessEqual => self.emit_bytes(OpCode::OpGreater as u8, OpCode::OpNot as u8),
             _ => (),
         }
     }
@@ -517,13 +521,13 @@ fn get_rule(token_type: TokenType) -> ParseRule {
         TokenType::Slash => ParseRule { prefix: None, infix: Some(|p| p.binary()), precedence: Precedence::Factor },
         TokenType::Star => ParseRule { prefix: None, infix: Some(|p| p.binary()), precedence: Precedence::Factor },
         TokenType::Bang => ParseRule { prefix: Some(|p| p.unary()), infix: None, precedence: Precedence::None },
-        TokenType::BangEqual => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
-        TokenType::Equal => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
-        TokenType::EqualEqual => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
-        TokenType::Greater => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
-        TokenType::GreaterEqual => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
-        TokenType::Less => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
-        TokenType::LessEqual => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
+        TokenType::BangEqual => ParseRule { prefix: None, infix: Some(|p| p.binary()), precedence: Precedence::Equality },
+        TokenType::Equal => ParseRule { prefix: None, infix: Some(|p| p.binary()), precedence: Precedence::Equality },
+        TokenType::EqualEqual => ParseRule { prefix: None, infix: Some(|p| p.binary()), precedence: Precedence::Equality },
+        TokenType::Greater => ParseRule { prefix: None, infix: Some(|p| p.binary()), precedence: Precedence::Comparison },
+        TokenType::GreaterEqual => ParseRule { prefix: None, infix: Some(|p| p.binary()), precedence: Precedence::Comparison },
+        TokenType::Less => ParseRule { prefix: None, infix: Some(|p| p.binary()), precedence: Precedence::Comparison },
+        TokenType::LessEqual => ParseRule { prefix: None, infix: Some(|p| p.binary()), precedence: Precedence::Comparison },
         TokenType::Identifier => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
         TokenType::String => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
         TokenType::Number => ParseRule { prefix: Some(|p| p.number()), infix: None, precedence: Precedence::None },
