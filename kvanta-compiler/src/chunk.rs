@@ -5,20 +5,20 @@ use std::ops::Index;
 #[derive(Debug, TryFromPrimitive)]
 #[repr(u8)]
 pub enum OpCode {
-    OpReturn = 0,
-    OpConstant = 1,
-    OpNegate = 2,
-    OpAdd = 3,
-    OpSubtract = 4,
-    OpMultiply = 5,
-    OpDivide = 6,
-    OpTrue = 7,
-    OpFalse = 8,
-    OpNil = 9,
-    OpNot = 10,
-    OpEqual = 11,
-    OpGreater = 12,
-    OpLess = 13,
+    Return = 0,
+    Constant = 1,
+    Negate = 2,
+    Add = 3,
+    Subtract = 4,
+    Multiply = 5,
+    Divide = 6,
+    True = 7,
+    False = 8,
+    Nil = 9,
+    Not = 10,
+    Equal = 11,
+    Greater = 12,
+    Less = 13,
 }
 
 pub fn from(value: u8) -> Option<OpCode> {

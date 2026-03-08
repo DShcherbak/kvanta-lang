@@ -29,7 +29,7 @@ pub fn print_instruction(chunk: &Chunk, offset: &mut usize) {
     match instruction {
         None => println!("DISSASEMBLE_ERROR"),
         Some(code) => match code {
-            OpCode::OpConstant => one_arg_instruction(code, chunk, offset),
+            OpCode::Constant => one_arg_instruction(code, chunk, offset),
             _ => simple_instruction(code, offset),
         },
     }

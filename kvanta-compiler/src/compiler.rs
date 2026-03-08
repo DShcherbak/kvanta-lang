@@ -8,10 +8,10 @@
 // fn main() {
 //     let mut chunk = Chunk::new();
 //     let constant = chunk.add_constant(Value::Float(1.2));
-//     chunk.push_code(OpCode::OpConstant, 0);
+//     chunk.push_code(OpCode::Constant, 0);
 //     chunk.push(constant as u8, 0);
-//     chunk.push_code(OpCode::OpNegate, 0);
-//     chunk.push_code(OpCode::OpReturn, 123);
+//     chunk.push_code(OpCode::Negate, 0);
+//     chunk.push_code(OpCode::Return, 123);
 //     let _ = interpret(Rc::new(chunk));
 // }
 
@@ -407,7 +407,7 @@ impl<'comp> Parser<'comp> {
             self.error_at_current("Too many constants in one chunk.");
             return;
         }
-        self.emit_bytes(OpCode::OpConstant as u8, constant as u8);
+        self.emit_bytes(OpCode::Constant as u8, constant as u8);
     }
 
 
@@ -430,7 +430,7 @@ impl<'comp> Parser<'comp> {
 
     fn end_compile(&mut self) {
         self.consume(TokenType::Eof, "Expect end of expression.");
-        self.emit_byte(OpCode::OpReturn as u8); // OpReturn
+        self.emit_byte(OpCode::Return as u8); // Return
     }
 
     fn expression(&mut self) {
@@ -444,9 +444,9 @@ impl<'comp> Parser<'comp> {
 
     fn literal(&mut self) {
         match self.previous.token_type {
-            TokenType::False => self.emit_byte(OpCode::OpFalse as u8),
-            TokenType::True => self.emit_byte(OpCode::OpTrue as u8),
-            TokenType::Nil => self.emit_byte(OpCode::OpNil as u8),
+            TokenType::False => self.emit_byte(OpCode::False as u8),
+            TokenType::True => self.emit_byte(OpCode::True as u8),
+            TokenType::Nil => self.emit_byte(OpCode::Nil as u8),
             _ => (),
         }
     }
@@ -460,8 +460,8 @@ impl<'comp> Parser<'comp> {
         let operator_type = self.previous.token_type.clone();
         self.parse_precedence(Precedence::Unary);
         match operator_type {
-            TokenType::Minus => self.emit_byte(OpCode::OpNegate as u8),
-            TokenType::Bang => self.emit_byte(OpCode::OpNot as u8),
+            TokenType::Minus => self.emit_byte(OpCode::Negate as u8),
+            TokenType::Bang => self.emit_byte(OpCode::Not as u8),
             _ => (),
         }
     }
@@ -492,16 +492,16 @@ impl<'comp> Parser<'comp> {
         self.parse_precedence(rule.precedence.next().unwrap());
 
         match operator_type {
-            TokenType::Plus => self.emit_byte(OpCode::OpAdd as u8),
-            TokenType::Minus => self.emit_byte(OpCode::OpSubtract as u8),
-            TokenType::Star => self.emit_byte(OpCode::OpMultiply as u8),
-            TokenType::Slash => self.emit_byte(OpCode::OpDivide as u8),
-            TokenType::BangEqual => self.emit_bytes(OpCode::OpEqual as u8, OpCode::OpNot as u8), // TODO: Implement OpNotEqual
-            TokenType::EqualEqual => self.emit_byte(OpCode::OpEqual as u8),
-            TokenType::Greater => self.emit_byte(OpCode::OpGreater as u8),
-            TokenType::GreaterEqual => self.emit_bytes(OpCode::OpLess as u8, OpCode::OpNot as u8),
-            TokenType::Less => self.emit_byte(OpCode::OpLess as u8),
-            TokenType::LessEqual => self.emit_bytes(OpCode::OpGreater as u8, OpCode::OpNot as u8),
+            TokenType::Plus => self.emit_byte(OpCode::Add as u8),
+            TokenType::Minus => self.emit_byte(OpCode::Subtract as u8),
+            TokenType::Star => self.emit_byte(OpCode::Multiply as u8),
+            TokenType::Slash => self.emit_byte(OpCode::Divide as u8),
+            TokenType::BangEqual => self.emit_bytes(OpCode::Equal as u8, OpCode::Not as u8), // TODO: Implement OpNotEqual
+            TokenType::EqualEqual => self.emit_byte(OpCode::Equal as u8),
+            TokenType::Greater => self.emit_byte(OpCode::Greater as u8),
+            TokenType::GreaterEqual => self.emit_bytes(OpCode::Less as u8, OpCode::Not as u8),
+            TokenType::Less => self.emit_byte(OpCode::Less as u8),
+            TokenType::LessEqual => self.emit_bytes(OpCode::Greater as u8, OpCode::Not as u8),
             _ => (),
         }
     }

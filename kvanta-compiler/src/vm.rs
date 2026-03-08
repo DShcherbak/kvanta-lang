@@ -47,12 +47,12 @@ impl VM {
         loop {
             if let Some(code) = self.chunk.get(self.ip).and_then(|x| from(*x)) {
                 match code {
-                    OpCode::OpReturn => {
+                    OpCode::Return => {
                         let const_value = self.pop();
                         println!("{:?}", const_value);
                         return InterpretResult::Ok;
                     },
-                    OpCode::OpConstant => {
+                    OpCode::Constant => {
                         self.ip += 1;
                         if let Some(id) = self.chunk.get(self.ip) 
                             && let Some(const_value) = self.chunk.get_constant(*id as usize) 
@@ -63,7 +63,7 @@ impl VM {
                             println!("ERR: NO CONSTANTS");
                         }
                     },
-                    OpCode::OpNegate => {
+                    OpCode::Negate => {
                         match self.peek(0) {
                             Value::Float(x) => {
                                 self.pop();
@@ -75,14 +75,14 @@ impl VM {
                             }
                         }
                     },
-                    OpCode::OpAdd => binary_op!(self, +),
-                    OpCode::OpSubtract => binary_op!(self, -),
-                    OpCode::OpMultiply => binary_op!(self, *),
-                    OpCode::OpDivide => binary_op!(self, /),
-                    OpCode::OpTrue => self.push(Value::Boolean(true)),
-                    OpCode::OpFalse => self.push(Value::Boolean(false)),
-                    OpCode::OpNil => self.push(Value::Nil),
-                    OpCode::OpNot => {
+                    OpCode::Add => binary_op!(self, +),
+                    OpCode::Subtract => binary_op!(self, -),
+                    OpCode::Multiply => binary_op!(self, *),
+                    OpCode::Divide => binary_op!(self, /),
+                    OpCode::True => self.push(Value::Boolean(true)),
+                    OpCode::False => self.push(Value::Boolean(false)),
+                    OpCode::Nil => self.push(Value::Nil),
+                    OpCode::Not => {
                         match self.peek(0) {
                             Value::Boolean(x) => {
                                 self.pop();
@@ -94,15 +94,15 @@ impl VM {
                             }
                         }
                     },
-                    OpCode::OpEqual => {
+                    OpCode::Equal => {
                         let a = self.peek(0);
                         let b = self.peek(1);
                         self.pop();
                         self.pop();
                         self.push(Value::Boolean(a == b));
                     },
-                    OpCode::OpGreater => binary_op_bin!(self, >),
-                    OpCode::OpLess => binary_op_bin!(self, <),
+                    OpCode::Greater => binary_op_bin!(self, >),
+                    OpCode::Less => binary_op_bin!(self, <),
                 }
             } else {
                 println!("ERR: END OF EXECUTION");
