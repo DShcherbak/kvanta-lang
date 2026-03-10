@@ -14,8 +14,6 @@
 //     let _ = interpret(Rc::new(chunk));
 // }
 
-use std::rc::Rc;
-use std::cell::RefCell;
 
 use crate::{chunk::{Chunk, OpCode}, value::Value, vm::CommonMemory};
 

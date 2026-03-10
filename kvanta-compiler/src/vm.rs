@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use crate::value::Value;
@@ -111,7 +110,7 @@ impl VM {
                                 let a_str = self.common.heap.get(a as usize);
                                 let b_str = self.common.heap.get(b as usize);
                                 if let (Some(a_str), Some(b_str)) = (a_str, b_str) {
-                                    let result = a_str.to_string() + &b_str;
+                                    let result = a_str.to_string() + b_str;
                                     let result_id = self.take_string(result);
                                     self.push(Value::String(result_id));
                                 } else {
