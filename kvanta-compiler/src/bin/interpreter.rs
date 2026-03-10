@@ -7,7 +7,7 @@ use kvanta_compiler::vm::VM;
 use kvanta_compiler::debug::print;
 
 fn interpret(vm: &mut VM, source: String) -> InterpretResult {
-    match compile(source, vm.common.clone()) {
+    match compile(source, &mut vm.common) {
         Err(error) => {
             println!("Compile error: {}", error);
             InterpretResult::CompileError

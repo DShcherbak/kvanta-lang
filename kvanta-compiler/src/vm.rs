@@ -15,7 +15,7 @@ pub struct VM {
     ip: usize,
     stack: Vec<Value>,
     variables: HashMap<String, Value>,
-    common: Rc<RefCell<CommonMemory>>,
+    pub common: CommonMemory,
 }
 
 // Accepts an operator, pops two values from the stack, applies the operator, and pushes the result back on the stack.
@@ -59,7 +59,7 @@ impl VM {
                     OpCode::Return => {
                         let const_value = self.pop();
                         if let Value::String(id) = const_value {
-                            if let Some(string) = self.common.borrow().heap.get(id as usize).cloned() {
+                            if let Some(string) = self.common.heap.get(id as usize) {
                                 println!("\"{}\"", string);
                                 return InterpretResult::Ok;
                             } else {
@@ -73,10 +73,9 @@ impl VM {
                     OpCode::Constant => {
                         self.ip += 1;
                         if let Some(id) = self.chunk.get(self.ip).cloned() {
-                            let temp_value = self.common.borrow().constants.get(id as usize).cloned();
-                            if let Some(const_value) = temp_value {
-                                let x = const_value.clone();
-                                self.push(x);
+                            let temp_value = self.common.constants.get(id as usize);
+                            if let Some(const_value) = temp_value.cloned() {
+                                self.push(const_value.clone());
                                 println!("Constant ID: {}", id);
                                 println!("Constant Value: {:?}", const_value);
                             } else {
@@ -109,8 +108,8 @@ impl VM {
                             (Value::String(b), Value::String(a)) => {
                                 self.pop();
                                 self.pop();
-                                let a_str = self.common.borrow().heap.get(a as usize).cloned();
-                                let b_str = self.common.borrow().heap.get(b as usize).cloned();
+                                let a_str = self.common.heap.get(a as usize);
+                                let b_str = self.common.heap.get(b as usize);
                                 if let (Some(a_str), Some(b_str)) = (a_str, b_str) {
                                     let result = a_str.to_string() + &b_str;
                                     let result_id = self.take_string(result);
@@ -157,10 +156,10 @@ impl VM {
                     OpCode::DefineGlobal => {
                         self.ip += 1;
                         if let Some(id) = self.chunk.get(self.ip) 
-                            && let Some(const_value) = self.common.borrow().constants.get(*id as usize)
+                            && let Some(const_value) = self.common.constants.get(*id as usize)
                         {
                             if let Value::String(const_id) = const_value 
-                            && let Some(const_str) = self.common.borrow().heap.get(*const_id as usize).cloned()
+                            && let Some(const_str) = self.common.heap.get(*const_id as usize)
                             {
                                 println!("DefineGlobal Name: {}", const_str);
                                 self.variables.insert(const_str.to_string(), self.peek(0));
@@ -178,11 +177,11 @@ impl VM {
                     OpCode::GetGlobal => {
                         self.ip += 1;
                         if let Some(id) = self.chunk.get(self.ip) 
-                            && let Some(const_value) = self.common.borrow().constants.get(*id as usize)
+                            && let Some(const_value) = self.common.constants.get(*id as usize)
                         {
                             println!("GetGlobal ID: {}", id);
                             if let Value::String(const_id) = const_value 
-                            && let Some(const_str) = self.common.borrow().heap.get(*const_id as usize)
+                            && let Some(const_str) = self.common.heap.get(*const_id as usize)
                             {
                                 println!("GetGlobal Name: {}", const_str);
                                 println!("All variables: {:?}", self.variables);
@@ -219,8 +218,8 @@ impl VM {
                 if x == y {
                     return true;
                 }
-                let x_str = self.heap.get(x as usize);
-                let y_str = self.heap.get(y as usize);
+                let x_str = self.common.heap.get(x as usize);
+                let y_str = self.common.heap.get(y as usize);
                 if let (Some(x_str), Some(y_str)) = (x_str, y_str) {
                     x_str == y_str
                 } else {                    
@@ -232,8 +231,8 @@ impl VM {
     }
 
     pub fn take_string(&mut self, s: String) -> i32 {
-        self.heap.push(s);
-        (self.heap.len() - 1) as i32
+        self.common.heap.push(s);
+        (self.common.heap.len() - 1) as i32
     }
 
     pub fn push(&mut self, value: Value) {
@@ -254,10 +253,10 @@ impl VM {
             ip: 0,
             stack: vec![],
             variables: HashMap::new(),
-            common: Rc::new(CommonMemory {
+            common: CommonMemory {
                 heap: vec![],
                 constants: vec![]
-            }),
+            }
         }
     }
 

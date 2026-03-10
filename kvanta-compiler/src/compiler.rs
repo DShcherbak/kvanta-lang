@@ -308,7 +308,7 @@ struct Parser<'comp> {
     had_error: bool,
     panic_mode: bool,
     current_chunk: Chunk,
-    common: Rc<RefCell<CommonMemory>>,
+    common: &'comp mut CommonMemory,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -416,9 +416,8 @@ impl<'comp> Parser<'comp> {
     }
 
     pub fn make_constant(&mut self, value: Value) -> usize {
-        let mut c = self.common.borrow_mut();
-        c.constants.push(value);
-        c.constants.len() - 1
+        self.common.constants.push(value);
+        self.common.constants.len() - 1
     }
 
     fn emit_constant(&mut self, value: Value) {
@@ -430,7 +429,7 @@ impl<'comp> Parser<'comp> {
         self.emit_bytes(OpCode::Constant as u8, constant as u8);
     }
 
-    fn new(scanner: Scanner<'comp>, common: Rc<RefCell<CommonMemory>>) -> Self {
+    fn new(scanner: Scanner<'comp>, common: &'comp mut CommonMemory) -> Self {
         let dummy_token = Token {
             token_type: TokenType::Eof,
             lexeme: "",
@@ -544,15 +543,13 @@ impl<'comp> Parser<'comp> {
     }
 
     fn copy_string(&mut self, s: &str) -> i32 {
-        let mut c = self.common.borrow_mut();
-        c.heap.push(s.to_string());
-        (c.heap.len() - 1) as i32
+        self.common.heap.push(s.to_string());
+        (self.common.heap.len() - 1) as i32
     }
 
     fn take_string(&mut self, s: String) -> i32 {
-        let mut c = self.common.borrow_mut();
-        c.heap.push(s);
-        (c.heap.len() - 1) as i32
+        self.common.heap.push(s);
+        (self.common.heap.len() - 1) as i32
     }
 
     fn string(&mut self) {
@@ -678,7 +675,7 @@ fn get_rule(token_type: TokenType) -> ParseRule {
         TokenType::Error => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
     }
 }
-pub fn compile(source: String, common: Rc<RefCell<CommonMemory>>) -> Result<Chunk, String> {
+pub fn compile(source: String, common: &mut CommonMemory) -> Result<Chunk, String> {
     let scanner = Scanner::new(&source);
     let mut parser = Parser::new(scanner, common);
 

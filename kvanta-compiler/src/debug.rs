@@ -7,13 +7,13 @@ fn simple_instruction(code: OpCode, offset: &mut usize) {
 
 fn one_arg_instruction(code: OpCode, chunk: &Chunk, offset: &mut usize) {
     *offset += 1;
-    if let Some(const_id) = chunk.get(*offset)
-        && let Some(const_value) = chunk.get_constant(*const_id as usize)
-    {
-        println!("{:?} {:?}", code, const_value);
-    } else {
-        println!("{:?} NO_ARG", code);
-    }
+    // if let Some(const_id) = chunk.get(*offset)
+    //     && let Some(const_value) = chunk.get_constant(*const_id as usize)
+    // {
+    //     println!("{:?} {:?}", code, const_value);
+    // } else {
+    //     println!("{:?} NO_ARG", code);
+    // }
     *offset += 1;
 }
 
