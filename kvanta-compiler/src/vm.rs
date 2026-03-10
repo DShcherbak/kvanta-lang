@@ -1,13 +1,21 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use crate::value::Value;
 
 use crate::chunk::*;
 
+pub struct CommonMemory {
+    pub heap: Vec<String>,
+    pub constants: Vec<Value>
+}
+
 pub struct VM {
     chunk: Rc<Chunk>,
     ip: usize,
     stack: Vec<Value>,
-    heap: Vec<String>,
+    variables: HashMap<String, Value>,
+    common: Rc<RefCell<CommonMemory>>,
 }
 
 // Accepts an operator, pops two values from the stack, applies the operator, and pushes the result back on the stack.
@@ -51,7 +59,7 @@ impl VM {
                     OpCode::Return => {
                         let const_value = self.pop();
                         if let Value::String(id) = const_value {
-                            if let Some(string) = self.heap.get(id as usize) {
+                            if let Some(string) = self.common.borrow().heap.get(id as usize).cloned() {
                                 println!("\"{}\"", string);
                                 return InterpretResult::Ok;
                             } else {
@@ -64,10 +72,16 @@ impl VM {
                     },
                     OpCode::Constant => {
                         self.ip += 1;
-                        if let Some(id) = self.chunk.get(self.ip) 
-                            && let Some(const_value) = self.chunk.get_constant(*id as usize) 
-                        {
-                            self.push((*const_value).clone());
+                        if let Some(id) = self.chunk.get(self.ip).cloned() {
+                            let temp_value = self.common.borrow().constants.get(id as usize).cloned();
+                            if let Some(const_value) = temp_value {
+                                let x = const_value.clone();
+                                self.push(x);
+                                println!("Constant ID: {}", id);
+                                println!("Constant Value: {:?}", const_value);
+                            } else {
+                                println!("ERR: INVALID CONSTANT ID");
+                            }
                         } 
                         else {
                             println!("ERR: NO CONSTANTS");
@@ -95,10 +109,10 @@ impl VM {
                             (Value::String(b), Value::String(a)) => {
                                 self.pop();
                                 self.pop();
-                                let a_str = self.heap.get(a as usize);
-                                let b_str = self.heap.get(b as usize);
+                                let a_str = self.common.borrow().heap.get(a as usize).cloned();
+                                let b_str = self.common.borrow().heap.get(b as usize).cloned();
                                 if let (Some(a_str), Some(b_str)) = (a_str, b_str) {
-                                    let result = a_str.to_string() + b_str;
+                                    let result = a_str.to_string() + &b_str;
                                     let result_id = self.take_string(result);
                                     self.push(Value::String(result_id));
                                 } else {
@@ -135,6 +149,58 @@ impl VM {
                     },
                     OpCode::Greater => binary_op_bin!(self, >),
                     OpCode::Less => binary_op_bin!(self, <),
+                    OpCode::Print => {
+                        let value = self.pop();
+                        println!("{:?}", value);
+                    },
+                    OpCode::Pop => { self.pop(); },
+                    OpCode::DefineGlobal => {
+                        self.ip += 1;
+                        if let Some(id) = self.chunk.get(self.ip) 
+                            && let Some(const_value) = self.common.borrow().constants.get(*id as usize)
+                        {
+                            if let Value::String(const_id) = const_value 
+                            && let Some(const_str) = self.common.borrow().heap.get(*const_id as usize).cloned()
+                            {
+                                println!("DefineGlobal Name: {}", const_str);
+                                self.variables.insert(const_str.to_string(), self.peek(0));
+                                self.pop();
+                                println!("All variables: {:?}", self.variables);
+                            }
+                            else {
+                                println!("ERR: INVALID VARIABLE NAME");
+                            }
+                        } 
+                        else {
+                            println!("ERR: NO CONSTANTS");
+                        }
+                    },
+                    OpCode::GetGlobal => {
+                        self.ip += 1;
+                        if let Some(id) = self.chunk.get(self.ip) 
+                            && let Some(const_value) = self.common.borrow().constants.get(*id as usize)
+                        {
+                            println!("GetGlobal ID: {}", id);
+                            if let Value::String(const_id) = const_value 
+                            && let Some(const_str) = self.common.borrow().heap.get(*const_id as usize)
+                            {
+                                println!("GetGlobal Name: {}", const_str);
+                                println!("All variables: {:?}", self.variables);
+                                if let Some(value) = self.variables.get(const_str) {
+                                    self.push(value.clone());
+                                } else {
+                                    self.runtime_error(&format!("Undefined variable '{}'.", const_str));
+                                    return InterpretResult::RuntimeError;
+                                }
+                            }
+                            else {
+                                println!("ERR: INVALID VARIABLE NAME");
+                            }
+                        } 
+                        else {
+                            println!("ERR: NO CONSTANTS");
+                        }
+                    }
                 }
             } else {
                 println!("ERR: END OF EXECUTION");
@@ -182,13 +248,22 @@ impl VM {
         self.stack.get(self.stack.len() - 1 - distance).unwrap_or(&Value::Float(0.0)).clone()
     }
 
-    pub fn new(chunk: Rc<Chunk>, heap: Vec<String>) -> Self {
+    pub fn new() -> Self {
         Self {
-            chunk,
+            chunk: Rc::new(Chunk::new()),
             ip: 0,
             stack: vec![],
-            heap,
+            variables: HashMap::new(),
+            common: Rc::new(CommonMemory {
+                heap: vec![],
+                constants: vec![]
+            }),
         }
+    }
+
+    pub fn update_chunk(&mut self, chunk: Rc<Chunk>) {
+        self.chunk = chunk;
+        self.ip = 0;
     }
 
     fn runtime_error(&self, message: &str) {
@@ -197,7 +272,8 @@ impl VM {
     }
 }
 
-pub fn interpret(chunk: Rc<Chunk>, heap: Vec<String>) -> InterpretResult {
-    let mut vm = VM::new(chunk, heap);
-    vm.run()
+impl Default for VM {
+    fn default() -> Self {
+        Self::new()
+    }
 }

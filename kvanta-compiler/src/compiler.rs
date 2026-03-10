@@ -7,7 +7,6 @@
 
 // fn main() {
 //     let mut chunk = Chunk::new();
-//     let constant = chunk.add_constant(Value::Float(1.2));
 //     chunk.push_code(OpCode::Constant, 0);
 //     chunk.push(constant as u8, 0);
 //     chunk.push_code(OpCode::Negate, 0);
@@ -15,7 +14,10 @@
 //     let _ = interpret(Rc::new(chunk));
 // }
 
-use crate::{chunk::{Chunk, OpCode}, value::Value};
+use std::rc::Rc;
+use std::cell::RefCell;
+
+use crate::{chunk::{Chunk, OpCode}, value::Value, vm::CommonMemory};
 
 struct Scanner<'comp> {
     start: usize,
@@ -299,7 +301,6 @@ impl<'comp> Scanner<'comp> {
         }
     }
 }
-
 struct Parser<'comp> {
     current: Token<'comp>,
     previous: Token<'comp>,
@@ -307,7 +308,7 @@ struct Parser<'comp> {
     had_error: bool,
     panic_mode: bool,
     current_chunk: Chunk,
-    heap: Vec<String>,
+    common: Rc<RefCell<CommonMemory>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -393,6 +394,18 @@ impl<'comp> Parser<'comp> {
         self.error_at_current(message);
     }
 
+    fn match_token(&mut self, token_type: TokenType) -> bool {
+        if !self.check(token_type) {
+            return false;
+        }
+        self.advance();
+        true
+    }
+
+    fn check(&self, token_type: TokenType) -> bool {
+        self.current.token_type == token_type
+    }
+
     fn emit_byte(&mut self, byte: u8) {
         self.current_chunk.push(byte, self.previous.line);
     }
@@ -402,8 +415,14 @@ impl<'comp> Parser<'comp> {
         self.emit_byte(byte2);
     }
 
+    pub fn make_constant(&mut self, value: Value) -> usize {
+        let mut c = self.common.borrow_mut();
+        c.constants.push(value);
+        c.constants.len() - 1
+    }
+
     fn emit_constant(&mut self, value: Value) {
-        let constant = self.current_chunk.add_constant(value);
+        let constant = self.make_constant(value);
         if constant > u8::MAX as usize {
             self.error_at_current("Too many constants in one chunk.");
             return;
@@ -411,8 +430,7 @@ impl<'comp> Parser<'comp> {
         self.emit_bytes(OpCode::Constant as u8, constant as u8);
     }
 
-
-    fn new(scanner: Scanner<'comp>) -> Self {
+    fn new(scanner: Scanner<'comp>, common: Rc<RefCell<CommonMemory>>) -> Self {
         let dummy_token = Token {
             token_type: TokenType::Eof,
             lexeme: "",
@@ -426,7 +444,7 @@ impl<'comp> Parser<'comp> {
             panic_mode: false,
             scanner,
             current_chunk: Chunk::new(),
-            heap: vec![],
+            common,
         }
     }
 
@@ -439,14 +457,102 @@ impl<'comp> Parser<'comp> {
         self.parse_precedence(Precedence::Assignment);
     }
 
+    fn declaration(&mut self) {
+        if self.match_token(TokenType::Var) {
+            self.var_declaration();
+        } else {
+            self.statement();
+        }
+
+        if self.panic_mode {
+            self.synchronize();
+        }
+    }
+
+    fn var_declaration(&mut self) {
+        let global_var_id = self.parse_variable("Expect variable name.");
+
+        if self.match_token(TokenType::Equal) {
+            self.expression();
+        } else {
+            self.emit_byte(OpCode::Nil as u8);
+        }
+
+        self.consume(TokenType::Semicolon, "Expect ';' after variable declaration.");
+        self.define_variable(global_var_id);
+    }
+
+    fn parse_variable(&mut self, error_message: &str) -> usize {
+        self.consume(TokenType::Identifier, error_message);
+        self.identifier_constant(self.previous.lexeme.to_string())
+    }
+
+    fn identifier_constant(&mut self, name: String) -> usize {
+        println!("Identifier: {}", name);
+        let string_id = self.take_string(name);
+        println!("String ID: {}", string_id);
+        let id = self.make_constant(Value::String(string_id));
+        println!("Constant ID: {}", id);
+        if id > u8::MAX as usize {
+            self.error_at_current("Too many constants in one chunk.");
+            return 0;
+        }
+        id
+    }
+
+    fn define_variable(&mut self, global: usize) {
+        self.emit_bytes(OpCode::DefineGlobal as u8, global as u8);
+    }
+
+    fn synchronize(&mut self) {
+        self.panic_mode = false;
+
+        while self.current.token_type != TokenType::Eof {
+            if self.previous.token_type == TokenType::Semicolon {
+                return;
+            }
+            match self.current.token_type {
+                TokenType::Class | TokenType::Fun | TokenType::Var | TokenType::For | TokenType::If | TokenType::While | TokenType::Print | TokenType::Return => return,
+                _ => self.advance(),
+            }
+        }
+    }
+
+    fn statement(&mut self) {
+        if self.match_token(TokenType::Print) {
+            self.print_statement();
+        } else {
+            self.expression_statement();
+        }
+    }
+
+    fn print_statement(&mut self) {
+        self.expression();
+        self.consume(TokenType::Semicolon, "Expect ';' after value.");
+        self.emit_byte(OpCode::Print as u8);
+    }
+
+    fn expression_statement(&mut self) {
+        self.expression();
+        self.consume(TokenType::Semicolon, "Expect ';' after expression.");
+        self.emit_byte(OpCode::Pop as u8);
+    }
+    
     fn number(&mut self) {
         let value = self.previous.lexeme.parse::<f32>().unwrap();
         self.emit_constant(Value::Float(value));
     }
 
     fn copy_string(&mut self, s: &str) -> i32 {
-        self.heap.push(s[1..s.len() - 1].to_string());
-        (self.heap.len() - 1) as i32
+        let mut c = self.common.borrow_mut();
+        c.heap.push(s.to_string());
+        (c.heap.len() - 1) as i32
+    }
+
+    fn take_string(&mut self, s: String) -> i32 {
+        let mut c = self.common.borrow_mut();
+        c.heap.push(s);
+        (c.heap.len() - 1) as i32
     }
 
     fn string(&mut self) {
@@ -517,6 +623,15 @@ impl<'comp> Parser<'comp> {
             _ => (),
         }
     }
+
+    fn variable(&mut self) {
+        self.named_variable(self.previous.lexeme.to_string());
+    }
+
+    fn named_variable(&mut self, name: String) {
+       let id = self.identifier_constant(name);
+       self.emit_bytes(OpCode::GetGlobal as u8, id as u8); 
+    }
 }
 
 fn get_rule(token_type: TokenType) -> ParseRule {
@@ -540,7 +655,7 @@ fn get_rule(token_type: TokenType) -> ParseRule {
         TokenType::GreaterEqual => ParseRule { prefix: None, infix: Some(|p| p.binary()), precedence: Precedence::Comparison },
         TokenType::Less => ParseRule { prefix: None, infix: Some(|p| p.binary()), precedence: Precedence::Comparison },
         TokenType::LessEqual => ParseRule { prefix: None, infix: Some(|p| p.binary()), precedence: Precedence::Comparison },
-        TokenType::Identifier => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
+        TokenType::Identifier => ParseRule { prefix: Some(|p| p.variable()), infix: None, precedence: Precedence::None },
         TokenType::String => ParseRule { prefix: Some(|p| p.string()), infix: None, precedence: Precedence::None },
         TokenType::Number => ParseRule { prefix: Some(|p| p.number()), infix: None, precedence: Precedence::None },
         TokenType::And => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
@@ -563,19 +678,20 @@ fn get_rule(token_type: TokenType) -> ParseRule {
         TokenType::Error => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
     }
 }
-
-pub fn compile(source: String) -> Result<(Chunk, Vec<String>), String> {
+pub fn compile(source: String, common: Rc<RefCell<CommonMemory>>) -> Result<Chunk, String> {
     let scanner = Scanner::new(&source);
-    let mut parser = Parser::new(scanner);
+    let mut parser = Parser::new(scanner, common);
 
     parser.advance();
-    parser.expression();
+    while !parser.match_token(TokenType::Eof) {
+        parser.declaration();
+    }
     parser.end_compile();
     
 
     if parser.had_error {
         Err("Compilation failed".to_string())
     } else {
-        Ok((parser.current_chunk, parser.heap))
+        Ok(parser.current_chunk)
     }
 }

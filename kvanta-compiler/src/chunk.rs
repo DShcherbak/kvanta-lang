@@ -19,6 +19,10 @@ pub enum OpCode {
     Equal = 11,
     Greater = 12,
     Less = 13,
+    Print = 14,
+    Pop = 15,
+    DefineGlobal = 16,
+    GetGlobal = 17,
 }
 
 pub fn from(value: u8) -> Option<OpCode> {
@@ -28,7 +32,6 @@ pub fn from(value: u8) -> Option<OpCode> {
 #[derive(Debug)]
 pub struct Chunk {
     chunk: Vec<u8>,
-    constants: Vec<Value>,
     pub lines: Vec<u32>,
 }
 
@@ -49,7 +52,6 @@ impl Chunk {
     pub fn new() -> Chunk {
         Chunk {
             chunk: vec![],
-            constants: vec![],
             lines: vec![],
         }
     }
@@ -60,15 +62,6 @@ impl Chunk {
 
     pub fn is_empty(&self) -> bool {
         self.chunk.is_empty()
-    }
-
-    pub fn add_constant(&mut self, value: Value) -> usize {
-        self.constants.push(value);
-        self.constants.len() - 1
-    }
-
-    pub fn get_constant(&self, id: usize) -> Option<&Value> {
-        self.constants.get(id)
     }
 }
 
