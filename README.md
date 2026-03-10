@@ -156,7 +156,9 @@ func keyboard(int key) {
 }
 
 func main() {
-    background(Color::White);
+    while (true) {
+        
+    }
 }
 ```
 
