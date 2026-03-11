@@ -439,7 +439,7 @@ impl<'comp> Parser<'comp> {
 
 struct LocalVariable {
     name: String,
-    depth: usize,
+    depth: Option<usize>,
 }
 
 struct Compiler<'comp> {
@@ -484,7 +484,48 @@ impl <'comp> Compiler<'comp> {
     }
 
     fn define_variable(&mut self, global: usize) {
+        if self.scope_depth > 0 {
+            self.mark_initialized();
+            return;
+        }
         self.emit_bytes(OpCode::DefineGlobal as u8, global as u8);
+    }
+
+    fn declare_variable(&mut self) {
+        if self.scope_depth == 0 {
+            return;
+        }
+
+        let mut duplicate_found = false;
+        for local in self.locals.iter().rev() {
+            if let Some(d) = local.depth && d < self.scope_depth {
+                break;
+            }
+            if local.name == self.parser.previous.lexeme {
+                duplicate_found = true;
+                break;
+            }
+        }
+        
+        if duplicate_found {
+            self.error_at_current("Already a variable with this name in this scope.");
+        }
+        self.add_local(self.parser.previous.clone());
+    }
+
+    fn mark_initialized(&mut self) {
+        match self.locals.last_mut() {
+            None => (),
+            Some(local) => local.depth = Some(self.scope_depth),
+        }
+    }
+
+    fn add_local(&mut self, name: Token) {
+        if self.locals.len() >= u8::MAX as usize {
+            self.error_at_current("Too many local variables in function.");
+            return;
+        }
+        self.locals.push(LocalVariable { name: name.lexeme.to_string(), depth: None });
     }
 
     fn emit_byte(&mut self, byte: u8) {
@@ -570,6 +611,12 @@ impl <'comp> Compiler<'comp> {
 
     fn parse_variable(&mut self, error_message: &str) -> usize {
         self.parser.consume(TokenType::Identifier, error_message);
+
+        self.declare_variable();
+        if self.scope_depth > 0 {
+            return 0;
+        }
+
         self.identifier_constant(self.parser.previous.lexeme.to_string())
     }
 
@@ -590,7 +637,7 @@ impl <'comp> Compiler<'comp> {
             self.declaration();
         }
         self.end_compile();
-        
+
         if self.parser.had_error {
             Err("Compile error".to_string())
         } else {
@@ -603,9 +650,31 @@ impl <'comp> Compiler<'comp> {
         if self.parser.match_token(TokenType::Print) {
             self.print_statement();
         } else if self.parser.match_token(TokenType::LeftBrace) {
-            //self.block();
+            self.begin_scope();
+            self.block();
+            self.end_scope();
         } else {
             self.expression_statement();
+        }
+    }
+
+    fn block(&mut self) {
+        while !self.parser.check(TokenType::RightBrace) && self.parser.current.token_type != TokenType::Eof {
+            self.declaration();
+        }
+
+        self.parser.consume(TokenType::RightBrace, "Expect '}' after block.");
+    }
+
+    fn begin_scope(&mut self) {
+        self.scope_depth += 1;
+    }
+
+    fn end_scope(&mut self) {
+        self.scope_depth -= 1;
+        while !self.locals.is_empty() && self.locals.last().unwrap().depth == Some(self.scope_depth) {
+            self.emit_byte(OpCode::Pop as u8);
+            self.locals.pop();
         }
     }
 
@@ -690,14 +759,47 @@ impl <'comp> Compiler<'comp> {
     }
 
     fn named_variable(&mut self, name: String, can_assign: bool) {
-       let id = self.identifier_constant(name);
-       if can_assign && self.parser.match_token(TokenType::Equal) {
+        let mut set = OpCode::SetGlobal as u8;
+        let mut get = OpCode::GetGlobal as u8;
+        let id : u8 = {
+            if let Some(idx) = self.resolve_local(&name) {
+                set = OpCode::SetLocal as u8;
+                get = OpCode::GetLocal as u8;
+                idx
+            } else {
+                self.identifier_constant(name) as u8
+            }
+        };
+        
+        if can_assign && self.parser.match_token(TokenType::Equal) {
            self.expression();
-           self.emit_bytes(OpCode::SetGlobal as u8, id as u8);
+           self.emit_bytes(get, id);
        } else {
-            self.emit_bytes(OpCode::GetGlobal as u8, id as u8); 
+            self.emit_bytes(set, id); 
        }
     }
+
+    fn resolve_local(&mut self, name: &str) -> Option<u8> {
+        let mut res : Option<(u8, Option<usize>)> = None;
+        for (i, local) in self.locals.iter().enumerate().rev() {
+            if local.name == name {
+                res = Some((i as u8, local.depth));
+            }
+        }
+        
+        match res {
+            None => None,
+            Some((idx, depth)) => {
+                if depth.is_none() {
+                    self.error_at_current("Can't read local variable in its own initializer.");
+                    None
+                } else {
+                    Some(idx)
+                }
+            }
+        }
+    }
+
 }
 
 

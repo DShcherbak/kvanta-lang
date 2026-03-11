@@ -23,6 +23,8 @@ pub enum OpCode {
     DefineGlobal = 16,
     GetGlobal = 17,
     SetGlobal = 18,
+    GetLocal = 19,
+    SetLocal = 20,
 }
 
 pub fn from(value: u8) -> Option<OpCode> {

@@ -223,6 +223,31 @@ impl VM {
                             println!("ERR: NO CONSTANTS");
                         }
                     }
+                    OpCode::GetLocal => {
+                        self.ip += 1;
+                        if let Some(id) = self.chunk.get(self.ip) {
+                            let value = self.stack.get(*id as usize).cloned();
+                            if let Some(value) = value {
+                                self.push(value);
+                            } else {
+                                println!("ERR: INVALID LOCAL VARIABLE ID");
+                            }
+                        } else {
+                            println!("ERR: NO LOCAL VARIABLES");
+                        }
+                    },
+                    OpCode::SetLocal => {
+                        self.ip += 1;
+                        if let Some(id) = self.chunk.get(self.ip) {
+                            if let Some(value) = self.stack.get(*id as usize).cloned() {
+                                self.stack[*id as usize] = value;
+                            } else {
+                                println!("ERR: INVALID LOCAL VARIABLE ID");
+                            }
+                        } else {
+                            println!("ERR: NO LOCAL VARIABLES");
+                        }
+                    }
                 }
             } else {
                 println!("ERR: END OF EXECUTION");

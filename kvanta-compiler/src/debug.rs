@@ -18,6 +18,16 @@ fn one_arg_instruction(code: OpCode, chunk: &Chunk, offset: &mut usize, vm: &VM)
     *offset += 1;
 }
 
+fn byte_instruction(code: OpCode, chunk: &Chunk, offset: &mut usize) {
+    *offset += 1;
+    if let Some(arg) = chunk.get(*offset) {
+        println!("{:?} {}", code, arg);
+    } else {
+        println!("{:?} NO_ARG", code);
+    }
+    *offset += 1;
+}
+
 pub fn print_instruction(chunk: &Chunk, offset: &mut usize, vm: &VM) {
     let offset_value = *offset;
     print!("{} ", offset_value);
@@ -31,6 +41,7 @@ pub fn print_instruction(chunk: &Chunk, offset: &mut usize, vm: &VM) {
         None => println!("DISSASEMBLE_ERROR"),
         Some(code) => match code {
             OpCode::Constant | OpCode::GetGlobal | OpCode::SetGlobal => one_arg_instruction(code, chunk, offset, vm),
+            OpCode::GetLocal | OpCode::SetLocal => byte_instruction(code, chunk, offset),
             _ => simple_instruction(code, offset),
         },
     }
