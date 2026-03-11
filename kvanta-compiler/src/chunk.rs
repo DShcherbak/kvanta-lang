@@ -22,13 +22,14 @@ pub enum OpCode {
     Pop = 15,
     DefineGlobal = 16,
     GetGlobal = 17,
+    SetGlobal = 18,
 }
 
 pub fn from(value: u8) -> Option<OpCode> {
     value.try_into().ok()
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Chunk {
     chunk: Vec<u8>,
     pub lines: Vec<u32>,

@@ -30,7 +30,7 @@ pub fn print_instruction(chunk: &Chunk, offset: &mut usize, vm: &VM) {
     match instruction {
         None => println!("DISSASEMBLE_ERROR"),
         Some(code) => match code {
-            OpCode::Constant | OpCode::GetGlobal=> one_arg_instruction(code, chunk, offset, vm),
+            OpCode::Constant | OpCode::GetGlobal | OpCode::SetGlobal => one_arg_instruction(code, chunk, offset, vm),
             _ => simple_instruction(code, offset),
         },
     }

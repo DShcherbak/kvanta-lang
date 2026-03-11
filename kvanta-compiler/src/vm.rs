@@ -198,6 +198,30 @@ impl VM {
                         else {
                             println!("ERR: NO CONSTANTS");
                         }
+                    },
+                    OpCode::SetGlobal => {
+                        self.ip += 1;
+                        if let Some(id) = self.chunk.get(self.ip) 
+                            && let Some(const_value) = self.common.constants.get(*id as usize)
+                        {
+                            if let Value::String(const_id) = const_value 
+                            && let Some(const_str) = self.common.heap.get(*const_id as usize)
+                            {
+                                if self.variables.contains_key(const_str) {
+                                    let value = self.peek(0);
+                                    self.variables.insert(const_str.to_string(), value);
+                                } else {
+                                    self.runtime_error(&format!("Undefined variable '{}'.", const_str));
+                                    return InterpretResult::RuntimeError;
+                                }
+                            }
+                            else {
+                                println!("ERR: INVALID VARIABLE NAME");
+                            }
+                        } 
+                        else {
+                            println!("ERR: NO CONSTANTS");
+                        }
                     }
                 }
             } else {
