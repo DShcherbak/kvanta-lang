@@ -1,7 +1,7 @@
 use num_enum::TryFromPrimitive;
 use std::ops::Index;
 
-#[derive(Debug, TryFromPrimitive)]
+#[derive(Debug, TryFromPrimitive, PartialEq, Eq, Clone, Copy)]
 #[repr(u8)]
 pub enum OpCode {
     Return = 0,
@@ -25,6 +25,9 @@ pub enum OpCode {
     SetGlobal = 18,
     GetLocal = 19,
     SetLocal = 20,
+    JumpIfFalse = 21,
+    Jump = 22,
+    Loop = 23,
 }
 
 pub fn from(value: u8) -> Option<OpCode> {
@@ -33,7 +36,7 @@ pub fn from(value: u8) -> Option<OpCode> {
 
 #[derive(Debug, Clone)]
 pub struct Chunk {
-    chunk: Vec<u8>,
+    pub chunk: Vec<u8>,
     pub lines: Vec<u32>,
 }
 
@@ -64,6 +67,15 @@ impl Chunk {
 
     pub fn is_empty(&self) -> bool {
         self.chunk.is_empty()
+    }
+
+    pub fn read_short(&self, offset: usize) -> Option<usize> {
+        if offset + 1 >= self.chunk.len() {
+            return None;
+        }
+        let high = self.chunk[offset] as usize;
+        let low = self.chunk[offset + 1] as usize;
+        Some((high << 8) | low)
     }
 }
 

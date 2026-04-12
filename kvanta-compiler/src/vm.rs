@@ -247,7 +247,41 @@ impl VM {
                         } else {
                             println!("ERR: NO LOCAL VARIABLES");
                         }
-                    }
+                    },
+                    OpCode::JumpIfFalse => {
+                        self.ip += 1;
+                        if let Some(offset) = self.chunk.read_short(self.ip) {
+                            if let Value::Boolean(condition) = self.peek(0) {
+                                if !condition {
+                                    self.ip += offset;
+                                }
+                            } else {
+                                println!("ERR: CONDITION MUST BE A BOOLEAN");
+                                return InterpretResult::RuntimeError;
+                            }
+                        } else {
+                            println!("ERR: NO JUMP OFFSET");
+                            return InterpretResult::RuntimeError;
+                        }
+                    },
+                    OpCode::Jump => {
+                        self.ip += 1;
+                        if let Some(offset) = self.chunk.read_short(self.ip) {
+                            self.ip += offset;
+                        } else {
+                            println!("ERR: NO JUMP OFFSET");
+                            return InterpretResult::RuntimeError;
+                        }
+                    },
+                    OpCode::Loop => {
+                        self.ip += 1;
+                        if let Some(offset) = self.chunk.read_short(self.ip) {
+                            self.ip -= offset;
+                        } else {
+                            println!("ERR: NO LOOP OFFSET");
+                            return InterpretResult::RuntimeError;
+                        }
+                    },
                 }
             } else {
                 println!("ERR: END OF EXECUTION");

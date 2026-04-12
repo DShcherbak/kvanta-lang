@@ -28,6 +28,17 @@ fn byte_instruction(code: OpCode, chunk: &Chunk, offset: &mut usize) {
     *offset += 1;
 }
 
+fn jump_instruction(code: OpCode, chunk: &Chunk, offset: &mut usize, sign: bool) {
+    *offset += 1;
+    if let Some(jump) = chunk.read_short(*offset) {
+        let jump_offset = if sign { *offset + jump } else { *offset - jump };
+        println!("{:?} {}", code, jump_offset);
+    } else {
+        println!("{:?} NO_ARG", code);
+    }
+    *offset += 2;
+}
+
 pub fn print_instruction(chunk: &Chunk, offset: &mut usize, vm: &VM) {
     let offset_value = *offset;
     print!("{} ", offset_value);
@@ -42,6 +53,7 @@ pub fn print_instruction(chunk: &Chunk, offset: &mut usize, vm: &VM) {
         Some(code) => match code {
             OpCode::Constant | OpCode::GetGlobal | OpCode::SetGlobal => one_arg_instruction(code, chunk, offset, vm),
             OpCode::GetLocal | OpCode::SetLocal => byte_instruction(code, chunk, offset),
+            OpCode::Jump | OpCode::JumpIfFalse | OpCode::Loop => jump_instruction(code, chunk, offset, code != OpCode::Jump),
             _ => simple_instruction(code, offset),
         },
     }
