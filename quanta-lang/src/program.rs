@@ -184,13 +184,36 @@ impl Program {
                 return Ok(return_type);
             }
             AstProgram::Forest(ref forest) => {
+                for (astst, (coords)) in &forest.1 {
+                    if let AstStatement::Init{typ, val, expr} = astst {
+                        let name = val;
+                        if self.keywords.contains(name) {
+                            return Err(Error::type_er(format!("'{}' is a keyword, it cannot be the name of a variable", name), *coords));
+                        }
+                        let (expr_type, new_expr) = self.clone().type_check_init(typ.clone(), name.clone(), expr.clone(), coords.clone())?;
+                        if expr_type.type_name != typ.type_name {
+                            return Err(Error::type_er(format!("Global variable {} of type {} cannot be assigned a type {}", name, typ.to_string(), expr_type.to_string()), *coords));
+                        }
+                        if self.contains_key(name) {
+                            return Err(Error::logic(format!("Global variable {} is re-defined!", name), *coords));
+                        }
+                        self.global_vars.insert(name.clone(), (expr_type, new_expr));
+                    }
+                }
+
                 for func in &forest.0 {
                     if self.keywords.contains(&func.name) {
                         return Err(Error::type_er(format!("'{}' is a keyword, it cannot be the name of a function", func.name), func.header));
                     }
+                    if self.global_vars.contains_key(&func.name) {
+                        return Err(Error::type_er(format!("{} is a global variable, it cannot be the name of a function", func.name), func.header))
+                    }
                     for (argname, _) in &func.args {
                         if self.keywords.contains(argname) { 
                             return Err(Error::type_er(format!("'{}' is a keyword, it cannot be the name of a variable", argname), func.header));
+                        }
+                        if self.global_vars.contains_key(argname) {
+                            return Err(Error::type_er(format!("{} is a global variable, it cannot be the name of a function argument", argname), func.header))
                         }
                     }
                     if &func.name == "keyboard" {
@@ -212,22 +235,7 @@ impl Program {
                     }
                     self.function_defs.insert(func.name.clone(), (func.args.clone(), func.return_type.clone()));
                 }
-                for (astst, (coords)) in &forest.1 {
-                    if let AstStatement::Init{typ, val, expr} = astst {
-                        let name = val;
-                        if self.keywords.contains(name) {
-                            return Err(Error::type_er(format!("'{}' is a keyword, it cannot be the name of a variable", name), *coords));
-                        }
-                        let (expr_type, new_expr) = self.clone().type_check_init(typ.clone(), name.clone(), expr.clone(), coords.clone())?;
-                        if expr_type.type_name != typ.type_name {
-                            return Err(Error::type_er(format!("Global variable {} of type {} cannot be assigned a type {}", name, typ.to_string(), expr_type.to_string()), *coords));
-                        }
-                        if self.contains_key(name) {
-                            return Err(Error::logic(format!("Global variable {} is re-defined!", name), *coords));
-                        }
-                        self.global_vars.insert(name.clone(), (expr_type, new_expr));
-                    }
-                }
+                
                 for func in &forest.0 {
                     let mut sub = self.create_subprogram(None);
                     for arg in &func.args {
