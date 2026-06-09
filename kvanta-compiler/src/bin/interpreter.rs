@@ -15,6 +15,9 @@ fn interpret(vm: &mut VM, source: String) -> InterpretResult {
         Ok(function) => {
             // DEBUG
             print(&function.chunk, &function.name, vm);
+            for funct in vm.common.functions.iter() {
+                print(&funct.chunk, &funct.name, vm);
+            }
             vm.update_func(function);
             vm.run()
         },

@@ -290,6 +290,7 @@ impl<'comp> Scanner<'comp> {
     }
 
     fn new(source: &'comp str) -> Self {
+        println!("My symbols: {}", &source);
         Scanner {
             start: 0,
             current: 0,
@@ -341,8 +342,8 @@ impl Precedence {
 }
 
 struct ParseRule {
-    prefix: Option<fn(&mut Compiler, bool)>,
-    infix: Option<fn(&mut Compiler, bool)>,
+    prefix: Option<fn(&mut Compiler<'_, '_>, bool)>,
+    infix: Option<fn(&mut Compiler<'_, '_>, bool)>,
     precedence: Precedence,
 }
 
@@ -448,17 +449,17 @@ enum FunctionType {
     Script,
 }
 
-struct Compiler<'comp> {
+struct Compiler<'src, 'a> {
     function_type: FunctionType,
     function: Function,
-    parser: Parser<'comp>,
+    parser: &'a mut Parser<'src>,
     locals: Vec<LocalVariable>,
     scope_depth: usize,
-    common: &'comp mut CommonMemory,
+    common: &'a mut CommonMemory,
 }
 
-impl <'comp> Compiler<'comp> {
-    fn new(parser: Parser<'comp>, common: &'comp mut CommonMemory) -> Self {
+impl<'src, 'a> Compiler<'src, 'a> {
+    fn new(parser: &'a mut Parser<'src>, common: &'a mut CommonMemory) -> Self {
         Compiler {
             function_type: FunctionType::Script,
             function: new_function("outer".to_string()),
@@ -473,7 +474,7 @@ impl <'comp> Compiler<'comp> {
         &mut self.function.chunk
     }
 
-    fn function(&self) -> Function {
+    fn compiled_function(&self) -> Function {
         self.function.clone()
     }
 
@@ -530,6 +531,10 @@ impl <'comp> Compiler<'comp> {
     }
 
     fn mark_initialized(&mut self) {
+        if self.scope_depth == 0 {
+            return;
+        }
+
         match self.locals.last_mut() {
             None => (),
             Some(local) => local.depth = Some(self.scope_depth),
@@ -602,7 +607,9 @@ impl <'comp> Compiler<'comp> {
     }
 
     fn declaration(&mut self) {
-        if self.parser.match_token(TokenType::Var) {
+        if self.parser.match_token(TokenType::Fun) {
+            self.fun_declaration();
+        } else if self.parser.match_token(TokenType::Var) {
             self.var_declaration();
         } else {
             self.statement();
@@ -611,6 +618,14 @@ impl <'comp> Compiler<'comp> {
         if self.parser.panic_mode {
             self.parser.synchronize();
         }
+    }
+
+    fn fun_declaration(&mut self) {
+        let global_var_id = self.parse_variable("Expect function name.");
+        self.mark_initialized();
+        self.function_type = FunctionType::Function;
+        self.function();
+        self.define_variable(global_var_id);
     }
 
     fn var_declaration(&mut self) {
@@ -657,7 +672,7 @@ impl <'comp> Compiler<'comp> {
         if self.parser.had_error {
             Err("Compile error".to_string())
         } else {
-            Ok(self.function())
+            Ok(self.compiled_function())
         }
     }
 
@@ -796,6 +811,45 @@ impl <'comp> Compiler<'comp> {
         self.parser.consume(TokenType::RightBrace, "Expect '}' after block.");
     }
 
+    fn inner_function(&mut self) {
+        self.begin_scope();
+        self.parser.consume(TokenType::LeftParen, "Expect '(' after function name.");
+        if !self.parser.check(TokenType::RightParen) {
+            loop {
+                self.function.arity += 1;
+                if self.function.arity > u8::MAX as usize {
+                    self.error_at_current("Can't have more than 255 parameters.");
+                }
+                let name = self.parse_variable("Expect param name");
+                self.define_variable(name);
+                if !self.parser.match_token(TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+        self.parser.consume(TokenType::RightParen, "Expect ')' after parameters.");
+        self.parser.consume(TokenType::LeftBrace, "Expect '{' before function body.");
+        self.block();
+    }
+
+    fn get_function_name(&mut self) {
+        self.function.name = self.parser.previous.lexeme.to_string();
+    }
+
+    fn function(&mut self) {
+        let next_function = {
+            let mut next_compiler = Compiler::new(self.parser, self.common);
+            next_compiler.function_type = FunctionType::Function;
+            next_compiler.get_function_name();
+            next_compiler.inner_function();
+            next_compiler.compiled_function()
+        };
+        println!("Function compiled: {:?}", next_function);
+        let fun_id = self.take_function(next_function);
+        let function_id = self.make_constant(Value::Function(fun_id));
+        self.emit_bytes(OpCode::Constant as u8, function_id as u8);
+    }
+
     fn begin_scope(&mut self) {
         self.scope_depth += 1;
     }
@@ -833,6 +887,11 @@ impl <'comp> Compiler<'comp> {
     fn take_string(&mut self, s: String) -> i32 {
         self.common.heap.push(s);
         (self.common.heap.len() - 1) as i32
+    }
+
+    fn take_function(&mut self, f: Function) -> i32 {
+        self.common.functions.push(f);
+        (self.common.functions.len() - 1) as i32
     }
 
     fn string(&mut self) {
@@ -999,8 +1058,8 @@ fn get_rule(token_type: TokenType) -> ParseRule {
 
 pub fn compile(source: String, common: &mut CommonMemory) -> Result<Function, String> {
     let scanner = Scanner::new(&source);
-    let parser = Parser::new(scanner);
-    let mut compiler = Compiler::new(parser, common);
+    let mut parser = Parser::new(scanner);
+    let mut compiler = Compiler::new(&mut parser, common);
 
     compiler.compile()
 }

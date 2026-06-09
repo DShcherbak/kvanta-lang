@@ -6,6 +6,7 @@ use crate::chunk::*;
 
 pub struct CommonMemory {
     pub heap: Vec<String>,
+    pub functions: Vec<Function>,
     pub constants: Vec<Value>
 }
 
@@ -363,6 +364,7 @@ impl VM {
             variables: HashMap::new(),
             common: CommonMemory {
                 heap: vec![],
+                functions: vec![],
                 constants: vec![]
             }
         }

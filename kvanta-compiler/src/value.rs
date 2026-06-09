@@ -1,21 +1,24 @@
 use crate::chunk::Chunk;
 
 #[derive(Debug, Clone)]
+pub struct Function {
+    pub arity: usize,
+    pub chunk: Chunk,
+    pub name: String
+}
+
+#[derive(Debug, Clone)]
 pub enum Value {
     Float(f32),
     Boolean(bool),
     Nil,
     String(i32),
+    Function(i32),
 }
 
 pub type ValueArray = Vec<Value>;
 
-#[derive(Debug, Clone)]
-pub struct Function {
-    arity: usize,
-    pub chunk: Chunk,
-    pub name: String
-}
+
 
 pub fn new_function(name: String) -> Function {
     Function {
