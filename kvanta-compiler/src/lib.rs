@@ -3,3 +3,6 @@ pub mod debug;
 pub mod value;
 pub mod vm;
 pub mod compiler;
+pub mod scanner;
+pub mod parser;
+pub mod ast;

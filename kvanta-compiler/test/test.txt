@@ -1,4 +1,4 @@
-fun add(a, b) {
+global fun add(a, b) {
     return inc(a) + b;
 }
 
