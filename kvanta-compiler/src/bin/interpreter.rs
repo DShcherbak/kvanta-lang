@@ -12,10 +12,10 @@ fn interpret(vm: &mut VM, source: String) -> InterpretResult {
             println!("Compile error: {}", error);
             InterpretResult::CompileError
         }
-        Ok(chunk) => {
+        Ok(function) => {
             // DEBUG
-            print(&chunk, "code", vm);
-            vm.update_chunk(Rc::new(chunk));
+            print(&function.chunk, &function.name, vm);
+            vm.update_chunk(Rc::new(function.chunk));
             vm.run()
         },
     }

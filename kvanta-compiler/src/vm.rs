@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::rc::Rc;
-use crate::value::Value;
+use crate::value::{Function, Value};
 
 use crate::chunk::*;
 
@@ -9,8 +9,14 @@ pub struct CommonMemory {
     pub constants: Vec<Value>
 }
 
+pub struct CallFrame {
+    function: Function,
+    ip: usize,
+    slot_start: usize,
+}
+
 pub struct VM {
-    chunk: Rc<Chunk>,
+    frames: Vec<CallFrame>,
     ip: usize,
     stack: Vec<Value>,
     variables: HashMap<String, Value>,
@@ -52,11 +58,22 @@ pub enum InterpretResult {
 
 impl VM {
     pub fn read_byte(&mut self) -> Option<u8> {
-        let byte = self.chunk.get(self.ip).cloned();
+        let byte = self.frames.last_mut().unwrap().function.chunk.get(self.ip).cloned();
         if byte.is_some() {
             self.ip += 1;
         }
         byte
+    }
+
+    fn read_short(&mut self) -> Option<usize> {
+        let high = self.frames.last_mut().unwrap().function.chunk.get(self.ip).cloned();
+        let low = self.frames.last_mut().unwrap().function.chunk.get(self.ip + 1).cloned();
+        if let (Some(high), Some(low)) = (high, low) {
+            self.ip += 2;
+            Some(((high as usize) << 8) | (low as usize))
+        } else {
+            None
+        }
     }
 
     pub fn run(&mut self) -> InterpretResult {
@@ -252,7 +269,7 @@ impl VM {
                         }
                     },
                     OpCode::JumpIfFalse => {
-                        if let Some(offset) = self.chunk.read_short(&mut self.ip) {
+                        if let Some(offset) = self.read_short() {
                             if let Value::Boolean(condition) = self.peek(0) {
                                 if !condition {
                                     self.ip += offset;
@@ -267,7 +284,7 @@ impl VM {
                         }
                     },
                     OpCode::Jump => {
-                        if let Some(offset) = self.chunk.read_short(&mut self.ip) {
+                        if let Some(offset) = self.read_short() {
                             self.ip += offset;
                         } else {
                             println!("ERR: NO JUMP OFFSET");
@@ -275,7 +292,7 @@ impl VM {
                         }
                     },
                     OpCode::Loop => {
-                        if let Some(offset) = self.chunk.read_short(&mut self.ip) {
+                        if let Some(offset) = self.read_short() {
                             self.ip -= offset;
                         } else {
                             println!("ERR: NO LOOP OFFSET");
@@ -330,7 +347,7 @@ impl VM {
 
     pub fn new() -> Self {
         Self {
-            chunk: Rc::new(Chunk::new()),
+            frames: vec![],
             ip: 0,
             stack: vec![],
             variables: HashMap::new(),
@@ -342,13 +359,13 @@ impl VM {
     }
 
     pub fn update_chunk(&mut self, chunk: Rc<Chunk>) {
-        self.chunk = chunk;
+        self.frames.last_mut().unwrap().function.chunk = (*chunk).clone();
         self.ip = 0;
     }
 
     fn runtime_error(&self, message: &str) {
-        let instruction = self.chunk.get(self.ip).unwrap_or(&0);
-        println!("Runtime error: {}\n[line {}] in script", message, self.chunk.lines[*instruction as usize]);
+        let instruction = self.frames.last().unwrap().function.chunk.get(self.ip).unwrap_or(&0);
+        println!("Runtime error: {}\n[line {}] in script", message, self.frames.last().unwrap().function.chunk.lines[*instruction as usize]);
     }
 }
 

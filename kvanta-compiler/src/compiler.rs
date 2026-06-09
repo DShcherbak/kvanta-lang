@@ -15,7 +15,7 @@
 // }
 
 
-use crate::{chunk::{Chunk, OpCode}, value::Value, vm::CommonMemory};
+use crate::{chunk::{Chunk, OpCode}, value::{Function, Value, new_function}, vm::CommonMemory};
 
 struct Scanner<'comp> {
     start: usize,
@@ -443,23 +443,38 @@ struct LocalVariable {
     depth: Option<usize>,
 }
 
+enum FunctionType {
+    Function,
+    Script,
+}
+
 struct Compiler<'comp> {
+    function_type: FunctionType,
+    function: Function,
     parser: Parser<'comp>,
     locals: Vec<LocalVariable>,
     scope_depth: usize,
-    pub current_chunk: Chunk,
     common: &'comp mut CommonMemory,
 }
 
 impl <'comp> Compiler<'comp> {
     fn new(parser: Parser<'comp>, common: &'comp mut CommonMemory) -> Self {
         Compiler {
+            function_type: FunctionType::Script,
+            function: new_function("outer".to_string()),
             parser,
             locals: vec![],
             scope_depth: 0,
-            current_chunk: Chunk::new(),
             common,
         }
+    }
+
+    fn current_chunk(&mut self) -> &mut Chunk {
+        &mut self.function.chunk
+    }
+
+    fn function(&self) -> Function {
+        self.function.clone()
     }
 
     fn error_at_current(&mut self, message: &str) {
@@ -530,7 +545,8 @@ impl <'comp> Compiler<'comp> {
     }
 
     fn emit_byte(&mut self, byte: u8) {
-        self.current_chunk.push(byte, self.parser.previous.line);
+        let line = self.parser.previous.line;
+        self.current_chunk().push(byte, line);
     }
 
     fn emit_bytes(&mut self, byte1: u8, byte2: u8) {
@@ -631,7 +647,7 @@ impl <'comp> Compiler<'comp> {
         id
     }
 
-    fn compile(&mut self) -> Result<Chunk, String> {
+    fn compile(&mut self) -> Result<Function, String> {
         self.parser.advance();
         while self.parser.current.token_type != TokenType::Eof {
             self.declaration();
@@ -641,7 +657,7 @@ impl <'comp> Compiler<'comp> {
         if self.parser.had_error {
             Err("Compile error".to_string())
         } else {
-            Ok(self.current_chunk.clone())
+            Ok(self.function())
         }
     }
 
@@ -676,7 +692,7 @@ impl <'comp> Compiler<'comp> {
             self.expression_statement();
         }
 
-        let mut loop_start = self.current_chunk.len();
+        let mut loop_start = self.current_chunk().len();
 
         let exit_jump = if !self.parser.match_token(TokenType::Semicolon) {
             self.expression();
@@ -690,7 +706,7 @@ impl <'comp> Compiler<'comp> {
 
         if !self.parser.match_token(TokenType::RightParen) {
             let body_jump = self.emit_jump(OpCode::Jump);
-            let increment_start = self.current_chunk.len();
+            let increment_start = self.current_chunk().len();
             self.expression();
             self.emit_byte(OpCode::Pop as u8);
             self.parser.consume(TokenType::RightParen, "Expect ')' after for clauses.");
@@ -712,7 +728,7 @@ impl <'comp> Compiler<'comp> {
     }
 
     fn while_statement(&mut self) {
-        let loop_start = self.current_chunk.len();
+        let loop_start = self.current_chunk().len();
         self.parser.consume(TokenType::LeftParen, "Expect '(' after 'while'.");
         self.expression();
         self.parser.consume(TokenType::RightParen, "Expect ')' after condition.");
@@ -727,7 +743,7 @@ impl <'comp> Compiler<'comp> {
     }
 
     fn emit_loop(&mut self, loop_start: usize) {
-        let offset = self.current_chunk.len() - loop_start + 3;
+        let offset = self.current_chunk().len() - loop_start + 3;
         if offset > u16::MAX as usize {
             self.error_at_current("Loop body too large.");
         }
@@ -759,17 +775,17 @@ impl <'comp> Compiler<'comp> {
         self.emit_byte(instruction as u8);
         self.emit_byte(0xff);
         self.emit_byte(0xff);
-        self.current_chunk.len() - 2
+        self.current_chunk().len() - 2
     }
 
     fn patch_jump(&mut self, offset: usize) {
-        let jump = self.current_chunk.len() - offset - 2;
+        let jump = self.current_chunk().len() - offset - 2;
         if jump > u16::MAX as usize {
             self.error_at_current("Too much code to jump over.");
         }
 
-        self.current_chunk.chunk[offset] = ((jump >> 8) & 0xff) as u8;
-        self.current_chunk.chunk[offset + 1] = (jump & 0xff) as u8;
+        self.current_chunk().chunk[offset] = ((jump >> 8) & 0xff) as u8;
+        self.current_chunk().chunk[offset + 1] = (jump & 0xff) as u8;
     }
 
     fn block(&mut self) {
@@ -981,7 +997,7 @@ fn get_rule(token_type: TokenType) -> ParseRule {
     }
 }
 
-pub fn compile(source: String, common: &mut CommonMemory) -> Result<Chunk, String> {
+pub fn compile(source: String, common: &mut CommonMemory) -> Result<Function, String> {
     let scanner = Scanner::new(&source);
     let parser = Parser::new(scanner);
     let mut compiler = Compiler::new(parser, common);
