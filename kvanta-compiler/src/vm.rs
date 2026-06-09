@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::rc::Rc;
 use crate::value::{Function, Value};
 
 use crate::chunk::*;
@@ -311,11 +310,46 @@ impl VM {
                             return InterpretResult::RuntimeError;
                         }
                     },
+                    OpCode::Call => {
+                        if let Some(arg_count) = self.read_byte() {
+                            let callee = self.peek(arg_count as usize);
+                            if let Value::Function(fun_id) = callee {
+                                if let Some(function) = self.common.functions.get(fun_id as usize).cloned() {
+                                    self.call(function, arg_count);
+                                } else {
+                                    println!("ERR: INVALID FUNCTION ID");
+                                    return InterpretResult::RuntimeError;
+                                }
+                            } else {
+                                println!("ERR: CAN ONLY CALL FUNCTIONS");
+                                return InterpretResult::RuntimeError;
+                            }
+                        } else {
+                            println!("ERR: NO ARG COUNT");
+                            return InterpretResult::RuntimeError;
+                        }
+                    },
                 }
             } else {
                 println!("ERR: END OF EXECUTION");
                 return InterpretResult::RuntimeError;
             }
+        }
+    }
+
+    pub fn call(&mut self, function: Function, arg_count: u8) {
+        if arg_count as usize != function.arity {
+            self.runtime_error(&format!("Expected {} arguments but got {}", function.arity, arg_count));
+            return;
+        }
+        self.frames.push(CallFrame {
+            function,
+            ip: 0,
+            slot_start: self.stack.len() - arg_count as usize,
+        });
+        if self.frames.len() > 64 {
+            self.runtime_error("Stack overflow.");
+            return;
         }
     }
 
@@ -370,18 +404,12 @@ impl VM {
         }
     }
 
-    pub fn update_func(&mut self, function: Function) {
-        self.frames.push(CallFrame {
-            function,
-            ip: 0,
-            slot_start: 0,
-        });
-    }
-
     fn runtime_error(&self, message: &str) {
-        let ip = self.frame().ip;
-        let instruction = self.frame().function.chunk.get(ip).unwrap_or(&0);
-        println!("Runtime error: {}\n[line {}] in script", message, self.frame().function.chunk.lines[*instruction as usize]);
+        println!("Runtime error: {}", message);
+
+        for frame in self.frames.iter().rev() {
+            println!("[line {}] in {}", frame.function.chunk.lines[frame.ip], frame.function.name);
+        }
     }
 }
 

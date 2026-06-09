@@ -51,7 +51,7 @@ pub fn print_instruction(chunk: &Chunk, offset: &mut usize, vm: &VM) {
         None => println!("DISSASEMBLE_ERROR"),
         Some(code) => match code {
             OpCode::Constant | OpCode::GetGlobal | OpCode::SetGlobal | OpCode::DefineGlobal => one_arg_instruction(code, chunk, offset, vm),
-            OpCode::GetLocal | OpCode::SetLocal => byte_instruction(code, chunk, offset),
+            OpCode::GetLocal | OpCode::SetLocal | OpCode::Call => byte_instruction(code, chunk, offset),
             OpCode::Jump | OpCode::JumpIfFalse | OpCode::Loop => jump_instruction(code, chunk, offset, code != OpCode::Loop),
             _ => simple_instruction(code, offset),
         },

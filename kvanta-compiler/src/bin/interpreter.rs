@@ -2,7 +2,6 @@ use std::env;
 
 use kvanta_compiler::vm::InterpretResult;
 use kvanta_compiler::compiler::compile;
-use std::rc::Rc;
 use kvanta_compiler::vm::VM;
 use kvanta_compiler::debug::print;
 
@@ -18,7 +17,7 @@ fn interpret(vm: &mut VM, source: String) -> InterpretResult {
             for funct in vm.common.functions.iter() {
                 print(&funct.chunk, &funct.name, vm);
             }
-            vm.update_func(function);
+            vm.call(function, 0);
             vm.run()
         },
     }

@@ -462,7 +462,7 @@ impl<'src, 'a> Compiler<'src, 'a> {
     fn new(parser: &'a mut Parser<'src>, common: &'a mut CommonMemory) -> Self {
         Compiler {
             function_type: FunctionType::Script,
-            function: new_function("outer".to_string()),
+            function: new_function("MAIN_SCRIPT".to_string()),
             parser,
             locals: vec![],
             scope_depth: 0,
@@ -990,6 +990,32 @@ impl<'src, 'a> Compiler<'src, 'a> {
         }
     }
 
+    fn argument_list(&mut self) -> usize {
+        let mut arg_count = 0;
+        if !self.parser.check(TokenType::RightParen) {
+            loop {
+                self.expression();
+                arg_count += 1;
+                if arg_count > u8::MAX as usize {
+                    self.error_at_current("Can't have more than 255 arguments.");
+                }
+                if !self.parser.match_token(TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+        self.parser.consume(TokenType::RightParen, "Expect ')' after arguments.");
+        arg_count
+    }
+
+    fn call(&mut self) {
+        let arg_count = self.argument_list();
+        if arg_count > u8::MAX as usize {
+            self.error_at_current("Can't have more than 255 arguments.");
+        }
+        self.emit_bytes(OpCode::Call as u8, arg_count as u8);
+    }
+
     fn and(&mut self) {
         let end_jump = self.emit_jump(OpCode::JumpIfFalse);
         self.emit_byte(OpCode::Pop as u8);
@@ -1013,7 +1039,7 @@ impl<'src, 'a> Compiler<'src, 'a> {
 
 fn get_rule(token_type: TokenType) -> ParseRule {
     match token_type {
-        TokenType::LeftParen => ParseRule { prefix: Some(|p, _| p.grouping()), infix: None, precedence: Precedence::None },
+        TokenType::LeftParen => ParseRule { prefix: Some(|p, _| p.grouping()), infix: Some(|p, _| p.call()), precedence: Precedence::Call },
         TokenType::RightParen => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
         TokenType::LeftBrace => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
         TokenType::RightBrace => ParseRule { prefix: None, infix: None, precedence: Precedence::None },

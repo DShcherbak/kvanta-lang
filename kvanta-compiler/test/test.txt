@@ -1,6 +1,7 @@
-fun hello() {
-    var a = 4;
-    print(a + 9);
+fun a() { b(); }
+fun b() { c(); }
+fun c() {
+    c("too", "many");
 }
 
-print(3);
+a();
