@@ -87,23 +87,18 @@ impl VM {
     }
 
     pub fn run(&mut self) -> InterpretResult {
+        println!("====== MAIN EXECUTION ======");
         loop {
             if let Some(code) = self.read_byte().and_then(|x| from(x)) {
                 //println!("Executing: {:?}", code);
                 match code {
                     OpCode::Return => {
-                        let const_value = self.pop();
-                        if let Value::String(id) = const_value {
-                            if let Some(string) = self.common.heap.get(id as usize) {
-                                println!("\"{}\"", string);
-                                return InterpretResult::Ok;
-                            } else {
-                                println!("ERR: INVALID STRING ID");
-                                return InterpretResult::RuntimeError;
-                            }
+                        let return_value = self.pop();
+                        self.frames.pop();
+                        if self.frames.is_empty() {
+                            return InterpretResult::Ok;
                         }
-                        println!("{:?}", const_value);
-                        return InterpretResult::Ok;
+                        self.push(return_value);
                     },
                     OpCode::Constant => {
                         if let Some(id) = self.read_byte() {
@@ -198,10 +193,10 @@ impl VM {
                             if let Value::String(const_id) = const_value 
                             && let Some(const_str) = self.common.heap.get(*const_id as usize)
                             {
-                                println!("DefineGlobal Name: {}", const_str);
+                                //println!("DefineGlobal Name: {}", const_str);
                                 self.variables.insert(const_str.to_string(), self.peek(0));
                                 self.pop();
-                                println!("All variables: {:?}", self.variables);
+                                //println!("All variables: {:?}", self.variables);
                             }
                             else {
                                 println!("ERR: INVALID VARIABLE NAME");
@@ -215,12 +210,12 @@ impl VM {
                         if let Some(id) = self.read_byte() 
                             && let Some(const_value) = self.common.constants.get(id as usize)
                         {
-                            println!("GetGlobal ID: {}", id);
+                           // println!("GetGlobal ID: {}", id);
                             if let Value::String(const_id) = const_value 
                             && let Some(const_str) = self.common.heap.get(*const_id as usize)
                             {
-                                println!("GetGlobal Name: {}", const_str);
-                                println!("All variables: {:?}", self.variables);
+                               // println!("GetGlobal Name: {}", const_str);
+                             //   println!("All variables: {:?}", self.variables);
                                 if let Some(value) = self.variables.get(const_str) {
                                     self.push(value.clone());
                                 } else {

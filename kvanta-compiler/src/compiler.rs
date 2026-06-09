@@ -444,6 +444,7 @@ struct LocalVariable {
     depth: Option<usize>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 enum FunctionType {
     Function,
     Script,
@@ -575,7 +576,8 @@ impl<'src, 'a> Compiler<'src, 'a> {
 
     fn end_compile(&mut self) {
         self.parser.consume(TokenType::Eof, "Expect end of expression.");
-        self.emit_byte(OpCode::Return as u8); // Return
+        self.emit_byte(OpCode::Nil as u8);
+        self.emit_byte(OpCode::Return as u8);
     }
 
     fn expression(&mut self) {
@@ -684,7 +686,9 @@ impl<'src, 'a> Compiler<'src, 'a> {
             self.for_statement();
         } else if self.parser.match_token(TokenType::If) {
             self.if_statement();
-        }else if self.parser.match_token(TokenType::While) {
+        } else if self.parser.match_token(TokenType::Return) {
+            self.return_statement();
+        } else if self.parser.match_token(TokenType::While) {
             self.while_statement();
         } else if self.parser.match_token(TokenType::LeftBrace) {
             self.begin_scope();
@@ -693,6 +697,19 @@ impl<'src, 'a> Compiler<'src, 'a> {
         } else {
             self.expression_statement();
         }
+    }
+
+    fn return_statement(&mut self) {
+        if self.function_type == FunctionType::Script {
+            self.error_at_current("Can't return from top-level code.");
+        }
+        if self.parser.match_token(TokenType::Semicolon) {
+            self.emit_byte(OpCode::Nil as u8);
+        } else {
+            self.expression();
+            self.parser.consume(TokenType::Semicolon, "Expect ';' after return value.");
+        }
+        self.emit_byte(OpCode::Return as u8);
     }
 
     fn for_statement(&mut self) {
