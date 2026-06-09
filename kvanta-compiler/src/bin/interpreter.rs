@@ -15,7 +15,7 @@ fn interpret(vm: &mut VM, source: String) -> InterpretResult {
         Ok(function) => {
             // DEBUG
             print(&function.chunk, &function.name, vm);
-            vm.update_chunk(Rc::new(function.chunk));
+            vm.update_func(function);
             vm.run()
         },
     }

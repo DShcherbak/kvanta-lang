@@ -17,7 +17,6 @@ pub struct CallFrame {
 
 pub struct VM {
     frames: Vec<CallFrame>,
-    ip: usize,
     stack: Vec<Value>,
     variables: HashMap<String, Value>,
     pub common: CommonMemory,
@@ -66,10 +65,10 @@ impl VM {
     }
 
     pub fn read_byte(&mut self) -> Option<u8> {
-        let ip = self.ip;
+        let ip = self.frame().ip;
         let byte = self.frame_mut().function.chunk.get(ip).cloned();
         if byte.is_some() {
-            self.ip += 1;
+            self.frame_mut().ip += 1;
         }
         byte
     }
@@ -80,7 +79,7 @@ impl VM {
         let high = chunk.get(ip).cloned();
         let low = chunk.get(ip + 1).cloned();
         if let (Some(high), Some(low)) = (high, low) {
-            self.ip += 2;
+            self.frame_mut().ip += 2;
             Some(((high as usize) << 8) | (low as usize))
         } else {
             None
@@ -262,7 +261,7 @@ impl VM {
                     }
                     OpCode::GetLocal => {
                         if let Some(id) = self.read_byte() {
-                            let value = self.stack.get(id as usize).cloned();
+                            let value = self.stack.get(self.frame().slot_start + id as usize).cloned();
                             if let Some(value) = value {
                                 self.push(value);
                             } else {
@@ -274,7 +273,8 @@ impl VM {
                     },
                     OpCode::SetLocal => {
                         if let Some(id) = self.read_byte() {
-                            self.stack[id as usize] = self.peek(0);
+                            let slot = self.frame().slot_start + id as usize;
+                            self.stack[slot] = self.peek(0);
                         } else {
                             println!("ERR: NO LOCAL VARIABLES");
                         }
@@ -283,7 +283,7 @@ impl VM {
                         if let Some(offset) = self.read_short() {
                             if let Value::Boolean(condition) = self.peek(0) {
                                 if !condition {
-                                    self.ip += offset;
+                                    self.frame_mut().ip += offset;
                                 }
                             } else {
                                 println!("ERR: CONDITION MUST BE A BOOLEAN");
@@ -296,7 +296,7 @@ impl VM {
                     },
                     OpCode::Jump => {
                         if let Some(offset) = self.read_short() {
-                            self.ip += offset;
+                            self.frame_mut().ip += offset;
                         } else {
                             println!("ERR: NO JUMP OFFSET");
                             return InterpretResult::RuntimeError;
@@ -304,7 +304,7 @@ impl VM {
                     },
                     OpCode::Loop => {
                         if let Some(offset) = self.read_short() {
-                            self.ip -= offset;
+                            self.frame_mut().ip -= offset;
                         } else {
                             println!("ERR: NO LOOP OFFSET");
                             return InterpretResult::RuntimeError;
@@ -359,7 +359,6 @@ impl VM {
     pub fn new() -> Self {
         Self {
             frames: vec![],
-            ip: 0,
             stack: vec![],
             variables: HashMap::new(),
             common: CommonMemory {
@@ -369,14 +368,18 @@ impl VM {
         }
     }
 
-    pub fn update_chunk(&mut self, chunk: Rc<Chunk>) {
-        self.frames.last_mut().unwrap().function.chunk = (*chunk).clone();
-        self.ip = 0;
+    pub fn update_func(&mut self, function: Function) {
+        self.frames.push(CallFrame {
+            function,
+            ip: 0,
+            slot_start: 0,
+        });
     }
 
     fn runtime_error(&self, message: &str) {
-        let instruction = self.frames.last().unwrap().function.chunk.get(self.ip).unwrap_or(&0);
-        println!("Runtime error: {}\n[line {}] in script", message, self.frames.last().unwrap().function.chunk.lines[*instruction as usize]);
+        let ip = self.frame().ip;
+        let instruction = self.frame().function.chunk.get(ip).unwrap_or(&0);
+        println!("Runtime error: {}\n[line {}] in script", message, self.frame().function.chunk.lines[*instruction as usize]);
     }
 }
 
