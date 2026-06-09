@@ -69,12 +69,13 @@ impl Chunk {
         self.chunk.is_empty()
     }
 
-    pub fn read_short(&self, offset: usize) -> Option<usize> {
-        if offset + 1 >= self.chunk.len() {
+    pub fn read_short(&self, offset: &mut usize) -> Option<usize> {
+        if *offset + 1 >= self.chunk.len() {
             return None;
         }
-        let high = self.chunk[offset] as usize;
-        let low = self.chunk[offset + 1] as usize;
+        let high = self.chunk[*offset] as usize;
+        let low = self.chunk[*offset + 1] as usize;
+        *offset += 2;
         Some((high << 8) | low)
     }
 }

@@ -13,7 +13,7 @@
                         "run"
                     ]
                 },
-                "args": []
+                "args": ["test/test.txt"]
             },
         {
             "name": "Debug unit tests in library 'kvanta_compiler'",

@@ -51,9 +51,18 @@ pub enum InterpretResult {
 }
 
 impl VM {
+    pub fn read_byte(&mut self) -> Option<u8> {
+        let byte = self.chunk.get(self.ip).cloned();
+        if byte.is_some() {
+            self.ip += 1;
+        }
+        byte
+    }
+
     pub fn run(&mut self) -> InterpretResult {
         loop {
-            if let Some(code) = self.chunk.get(self.ip).and_then(|x| from(*x)) {
+            if let Some(code) = self.read_byte().and_then(|x| from(x)) {
+                //println!("Executing: {:?}", code);
                 match code {
                     OpCode::Return => {
                         let const_value = self.pop();
@@ -70,19 +79,18 @@ impl VM {
                         return InterpretResult::Ok;
                     },
                     OpCode::Constant => {
-                        self.ip += 1;
-                        if let Some(id) = self.chunk.get(self.ip).cloned() {
+                        if let Some(id) = self.read_byte() {
                             let temp_value = self.common.constants.get(id as usize);
                             if let Some(const_value) = temp_value.cloned() {
                                 self.push(const_value.clone());
-                                println!("Constant ID: {}", id);
-                                println!("Constant Value: {:?}", const_value);
+                                //println!("Constant ID: {}", id);
+                                //println!("Constant Value: {:?}", const_value);
                             } else {
                                 println!("ERR: INVALID CONSTANT ID");
                             }
                         } 
                         else {
-                            println!("ERR: NO CONSTANTS");
+                            println!("ERR: NO CONSTANTS 1");
                         }
                     },
                     OpCode::Negate => {
@@ -149,13 +157,16 @@ impl VM {
                     OpCode::Less => binary_op_bin!(self, <),
                     OpCode::Print => {
                         let value = self.pop();
-                        println!("{:?}", value);
+                        println!("Print: {:?}", value);
                     },
-                    OpCode::Pop => { self.pop(); },
+                    OpCode::Pop => { 
+                        let _ = self.pop();
+                        // let x = self.pop();
+                        // println!("Pop: {:?}", x);
+                    },
                     OpCode::DefineGlobal => {
-                        self.ip += 1;
-                        if let Some(id) = self.chunk.get(self.ip) 
-                            && let Some(const_value) = self.common.constants.get(*id as usize)
+                        if let Some(id) = self.read_byte() 
+                            && let Some(const_value) = self.common.constants.get(id as usize)
                         {
                             if let Value::String(const_id) = const_value 
                             && let Some(const_str) = self.common.heap.get(*const_id as usize)
@@ -170,13 +181,12 @@ impl VM {
                             }
                         } 
                         else {
-                            println!("ERR: NO CONSTANTS");
+                            println!("ERR: NO CONSTANTS 2");
                         }
                     },
                     OpCode::GetGlobal => {
-                        self.ip += 1;
-                        if let Some(id) = self.chunk.get(self.ip) 
-                            && let Some(const_value) = self.common.constants.get(*id as usize)
+                        if let Some(id) = self.read_byte() 
+                            && let Some(const_value) = self.common.constants.get(id as usize)
                         {
                             println!("GetGlobal ID: {}", id);
                             if let Value::String(const_id) = const_value 
@@ -196,13 +206,12 @@ impl VM {
                             }
                         } 
                         else {
-                            println!("ERR: NO CONSTANTS");
+                            println!("ERR: NO CONSTANTS 3");
                         }
                     },
                     OpCode::SetGlobal => {
-                        self.ip += 1;
-                        if let Some(id) = self.chunk.get(self.ip) 
-                            && let Some(const_value) = self.common.constants.get(*id as usize)
+                        if let Some(id) = self.read_byte() 
+                            && let Some(const_value) = self.common.constants.get(id as usize)
                         {
                             if let Value::String(const_id) = const_value 
                             && let Some(const_str) = self.common.heap.get(*const_id as usize)
@@ -220,13 +229,12 @@ impl VM {
                             }
                         } 
                         else {
-                            println!("ERR: NO CONSTANTS");
+                            println!("ERR: NO CONSTANTS 4");
                         }
                     }
                     OpCode::GetLocal => {
-                        self.ip += 1;
-                        if let Some(id) = self.chunk.get(self.ip) {
-                            let value = self.stack.get(*id as usize).cloned();
+                        if let Some(id) = self.read_byte() {
+                            let value = self.stack.get(id as usize).cloned();
                             if let Some(value) = value {
                                 self.push(value);
                             } else {
@@ -237,20 +245,14 @@ impl VM {
                         }
                     },
                     OpCode::SetLocal => {
-                        self.ip += 1;
-                        if let Some(id) = self.chunk.get(self.ip) {
-                            if let Some(value) = self.stack.get(*id as usize).cloned() {
-                                self.stack[*id as usize] = value;
-                            } else {
-                                println!("ERR: INVALID LOCAL VARIABLE ID");
-                            }
+                        if let Some(id) = self.read_byte() {
+                            self.stack[id as usize] = self.peek(0);
                         } else {
                             println!("ERR: NO LOCAL VARIABLES");
                         }
                     },
                     OpCode::JumpIfFalse => {
-                        self.ip += 1;
-                        if let Some(offset) = self.chunk.read_short(self.ip) {
+                        if let Some(offset) = self.chunk.read_short(&mut self.ip) {
                             if let Value::Boolean(condition) = self.peek(0) {
                                 if !condition {
                                     self.ip += offset;
@@ -265,8 +267,7 @@ impl VM {
                         }
                     },
                     OpCode::Jump => {
-                        self.ip += 1;
-                        if let Some(offset) = self.chunk.read_short(self.ip) {
+                        if let Some(offset) = self.chunk.read_short(&mut self.ip) {
                             self.ip += offset;
                         } else {
                             println!("ERR: NO JUMP OFFSET");
@@ -274,8 +275,7 @@ impl VM {
                         }
                     },
                     OpCode::Loop => {
-                        self.ip += 1;
-                        if let Some(offset) = self.chunk.read_short(self.ip) {
+                        if let Some(offset) = self.chunk.read_short(&mut self.ip) {
                             self.ip -= offset;
                         } else {
                             println!("ERR: NO LOOP OFFSET");
@@ -287,7 +287,6 @@ impl VM {
                 println!("ERR: END OF EXECUTION");
                 return InterpretResult::RuntimeError;
             }
-            self.ip+=1;
         }
     }
 
