@@ -898,6 +898,7 @@ impl <'comp> Compiler<'comp> {
         for (i, local) in self.locals.iter().enumerate().rev() {
             if local.name == name {
                 res = Some((i as u8, local.depth));
+                break;
             }
         }
         
