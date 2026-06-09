@@ -57,8 +57,17 @@ pub enum InterpretResult {
 }
 
 impl VM {
+    fn frame(&self) -> &CallFrame {
+        self.frames.last().unwrap()
+    }
+
+    fn frame_mut(&mut self) -> &mut CallFrame {
+        self.frames.last_mut().unwrap()
+    }
+
     pub fn read_byte(&mut self) -> Option<u8> {
-        let byte = self.frames.last_mut().unwrap().function.chunk.get(self.ip).cloned();
+        let ip = self.ip;
+        let byte = self.frame_mut().function.chunk.get(ip).cloned();
         if byte.is_some() {
             self.ip += 1;
         }
@@ -66,8 +75,10 @@ impl VM {
     }
 
     fn read_short(&mut self) -> Option<usize> {
-        let high = self.frames.last_mut().unwrap().function.chunk.get(self.ip).cloned();
-        let low = self.frames.last_mut().unwrap().function.chunk.get(self.ip + 1).cloned();
+        let ip = self.frame().ip;
+        let chunk = &self.frame_mut().function.chunk;
+        let high = chunk.get(ip).cloned();
+        let low = chunk.get(ip + 1).cloned();
         if let (Some(high), Some(low)) = (high, low) {
             self.ip += 2;
             Some(((high as usize) << 8) | (low as usize))
