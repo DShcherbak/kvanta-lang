@@ -7,7 +7,7 @@ pub struct Function {
     pub name: String
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Float(f32),
     Boolean(bool),
@@ -17,8 +17,6 @@ pub enum Value {
 }
 
 pub type ValueArray = Vec<Value>;
-
-
 
 pub fn new_function(name: String) -> Function {
     Function {

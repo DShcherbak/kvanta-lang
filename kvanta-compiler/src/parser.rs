@@ -1,7 +1,22 @@
 
 #![allow(dead_code)]
 
+use core::error;
+
 use crate::{ast::{ExpressionAst, ProgramAst, StatementAst, TypeAst}, chunk::{Chunk, OpCode}, scanner::{Token, TokenType}, value::{new_function, Function, Value}, vm::CommonMemory};
+
+// This is a macros that receives the tokenizer, token type, and an error message.
+// It checks if the current token type matches the expected token type, and if it does, it advances the tokenizer.
+// Else it produces return Err(error message).
+macro_rules! consume {
+    ($self:expr, $token_type:pat, $message:expr) => {
+        if let $token_type = $self.tokenizer.current.token_type {
+            $self.tokenizer.advance();
+        } else {
+            return Err($self.error_at_current($message));
+        }
+    };
+}
 
 pub struct Tokenizer<'comp> {
     current: Token<'comp>,
@@ -54,26 +69,27 @@ struct ParseRule {
 
 
 impl<'comp> Tokenizer<'comp> {
-    fn error_at_current(&mut self, message: &str) {
+    fn error_at_current(&mut self, message: &str) -> String {
         if self.panic_mode {
-            return;
+            return String::new();
         }
         self.panic_mode = true;
         let cur = self.current.clone();
-        self.error_at(&cur, message);
+        self.error_at(&cur, message)
     }
 
-    fn error_at(&mut self, token: &Token, message: &str) {
-        eprint!("[line {}] Error", token.line);
+    fn error_at(&mut self, token: &Token, message: &str) -> String {
+        let mut error_message = format!("[line {}] Error", token.line);
         if token.token_type == TokenType::Eof {
-            eprint!(" at end");
+            error_message.push_str(" at end");
         } else if token.token_type == TokenType::Error {
             // Nothing.
         } else {
-            eprint!(" at '{}'", token.lexeme);
+            error_message.push_str(&format!(" at '{}'", token.lexeme));
         }
-        eprintln!(": {}", message);
+        error_message.push_str(&format!(": {}", message));
         self.had_error = true;
+        error_message
     }
 
     fn advance(&mut self) {
@@ -225,7 +241,7 @@ impl<'src, 'a> Parser<'src, 'a> {
         if self.tokenizer.panic_mode {
             self.tokenizer.synchronize();
         }
-        Ok(result)
+        result
     }
 
     fn forest(&mut self) -> Result<ProgramAst, String> {
@@ -257,26 +273,27 @@ impl<'src, 'a> Parser<'src, 'a> {
         self.function.clone()
     }
 
-    fn error_at_current(&mut self, message: &str) {
+    fn error_at_current(&mut self, message: &str) -> String {
         if self.tokenizer.panic_mode {
-            return;
+            return String::new();
         }
         self.tokenizer.panic_mode = true;
         let cur = self.tokenizer.current.clone();
-        self.error_at(&cur, message);
+        self.error_at(&cur, message)
     }
 
-    fn error_at(&mut self, token: &Token, message: &str) {
-        eprint!("[line {}] Error", token.line);
+    fn error_at(&mut self, token: &Token, message: &str) -> String {
+        let mut error_message = format!("[line {}] Error", token.line);
         if token.token_type == TokenType::Eof {
-            eprint!(" at end");
+            error_message += " at end";
         } else if token.token_type == TokenType::Error {
             // Nothing.
         } else {
-            eprint!(" at '{}'", token.lexeme);
+            error_message += &format!(" at '{}'", token.lexeme);
         }
-        eprintln!(": {}", message);
+        error_message += &format!(": {}", message);
         self.tokenizer.had_error = true;
+        error_message
     }
 
     fn define_variable(&mut self, global: usize) {
@@ -358,9 +375,9 @@ impl<'src, 'a> Parser<'src, 'a> {
         self.emit_byte(OpCode::Return as u8);
     }
 
-    fn expression(&mut self) -> ExpressionAst {
+    fn expression(&mut self) -> Result<ExpressionAst, String> {
         self.parse_precedence(Precedence::Assignment);
-        ExpressionAst {}
+        Ok(ExpressionAst {})
     }
 
     fn parse_precedence(&mut self, precedence: Precedence) {
@@ -397,35 +414,34 @@ impl<'src, 'a> Parser<'src, 'a> {
         //self.define_variable(global_var_id);
     }
 
-    fn var_declaration(&mut self) -> StatementAst {
-        let type_token = self.variable_type();
+    fn var_declaration(&mut self) -> Result<StatementAst, String> {
+        let type_token = self.variable_type()?;
         let global_var_id = self.parse_variable("Expect variable name.");
         self.tokenizer.consume(TokenType::Equal, "Expect '=' after variable declaration.");
-        let expr = self.expression();
+        let expr = self.number()?;
         self.tokenizer.consume(TokenType::Semicolon, "Expect ';' after variable declaration.");
        // self.define_variable(global_var_id);
-        StatementAst::Var(type_token, global_var_id, expr)
+        Ok(StatementAst::Var(type_token, global_var_id, expr))
     }
 
-    fn variable_type(&mut self) -> TypeAst {
+    fn variable_type(&mut self) -> Result<TypeAst, String> {
         if self.tokenizer.match_token(TokenType::Int) {
-            TypeAst::Int
+            Ok(TypeAst::Int)
         } else if self.tokenizer.match_token(TokenType::Float) {
-            TypeAst::Float
+            Ok(TypeAst::Float)
         } else if self.tokenizer.match_token(TokenType::Color) {
-            TypeAst::Color
+            Ok(TypeAst::Color)
         } else if self.tokenizer.match_token(TokenType::Bool) {
-            TypeAst::Bool
+            Ok(TypeAst::Bool)
         } else if self.tokenizer.match_token(TokenType::Array) {
             self.tokenizer.consume(TokenType::Less, "Expect '<' after array type.");
-            let inner_type = self.variable_type();
+            let inner_type = self.variable_type()?;
             self.tokenizer.consume(TokenType::Comma, "Expect ',' after array inner type.");
-            let array_size = self.expression();
+            let array_size = self.number()?;
             self.tokenizer.consume(TokenType::Greater, "Expect '>' after array type.");
-            TypeAst::Array(Box::new(inner_type), array_size)
+            Ok(TypeAst::Array(Box::new(inner_type), array_size))
         } else {
-            self.error_at_current("Expect variable type.");
-            TypeAst::Int
+            Err(self.error_at_current("Expect variable type."))
         }
     }
 
@@ -444,22 +460,23 @@ impl<'src, 'a> Parser<'src, 'a> {
         id
     }
 
-    fn statement(&mut self) -> StatementAst {
-        if self.tokenizer.match_token(TokenType::Print) {
-            self.print_statement()
-        } else if self.tokenizer.match_token(TokenType::For) {
-            self.for_statement()
-        } else if self.tokenizer.match_token(TokenType::If) {
-            self.if_statement()
-        } else if self.tokenizer.match_token(TokenType::Return) {
-            self.return_statement()
-        } else if self.tokenizer.match_token(TokenType::While) {
-            self.while_statement()
-        } else if self.tokenizer.match_token(TokenType::LeftBrace) {
-            self.block()
-        } else {
-            self.expression_statement()
-        }
+    fn statement(&mut self) -> Result<StatementAst, String> {
+        // if self.tokenizer.match_token(TokenType::Print) {
+        //     self.print_statement()
+        // } else if self.tokenizer.match_token(TokenType::For) {
+        //     self.for_statement()
+        // } else if self.tokenizer.match_token(TokenType::If) {
+        //     self.if_statement()
+        // } else if self.tokenizer.match_token(TokenType::Return) {
+        //     self.return_statement()
+        // } else if self.tokenizer.match_token(TokenType::While) {
+        //     self.while_statement()
+        // } else if self.tokenizer.match_token(TokenType::LeftBrace) {
+        //     self.block()
+        // } else {
+        //     self.expression_statement()
+        // }
+        Err("No statements implemented yet.".to_string())
     }
 
     fn return_statement(&mut self) -> StatementAst {
@@ -652,16 +669,16 @@ impl<'src, 'a> Parser<'src, 'a> {
         StatementAst::Print
     }
 
-    fn expression_statement(&mut self) -> StatementAst {
-        self.expression();
-        self.tokenizer.consume(TokenType::Semicolon, "Expect ';' after expression.");
-        self.emit_byte(OpCode::Pop as u8);
-        StatementAst::Expression(ExpressionAst {})
+    fn expression_statement(&mut self) -> Result<StatementAst, String> {
+        let e = self.expression()?;
+        consume!(self, TokenType::Semicolon, "Expect ';' after expression.");
+        Ok(StatementAst::Expression(e))
     }
     
-    fn number(&mut self) {
-        let value = self.tokenizer.previous.lexeme.parse::<f32>().unwrap();
-        self.emit_constant(Value::Float(value));
+    fn number(&mut self) -> Result<Value,String> {
+        self.tokenizer.previous.lexeme.parse::<f32>()
+            .map(|x| Value::Float(x))
+            .map_err(|_| "Expected a number.".into())
     }
 
     fn copy_string(&mut self, s: &str) -> i32 {
@@ -845,7 +862,7 @@ fn get_rule(token_type: &TokenType) -> ParseRule {
         TokenType::LessEqual => ParseRule { prefix: None, infix: Some(|p, _| p.binary()), precedence: Precedence::Comparison },
         TokenType::Identifier => ParseRule { prefix: Some(|p, can_assign| p.variable(can_assign)), infix: None, precedence: Precedence::None },
         TokenType::String => ParseRule { prefix: Some(|p, _| p.string()), infix: None, precedence: Precedence::None },
-        TokenType::Number => ParseRule { prefix: Some(|p, _| p.number()), infix: None, precedence: Precedence::None },
+        TokenType::Number => ParseRule { prefix: Some(|_, _| ()/*p.number()*/), infix: None, precedence: Precedence::None },
         TokenType::And => ParseRule { prefix: None, infix: Some(|p, _| p.and()), precedence: Precedence::And },
         TokenType::Class => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
         TokenType::Else => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
