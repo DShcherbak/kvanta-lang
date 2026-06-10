@@ -7,9 +7,25 @@ pub enum ProgramAst {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum UnaryOperator {
+    Bang,
+    Minus
+}
 
-pub struct ExpressionAst {
+#[derive(Debug, Clone, PartialEq)]
+pub enum BinaryOperator {
+    Plus,
+    Minus,
+    Mult,
+    Divide,
+    Call
+}
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum ExpressionAst {
+    Value(Value),
+    Unary(UnaryOperator, Box<ExpressionAst>),
+    Binary(BinaryOperator, Box<ExpressionAst>, Box<ExpressionAst>)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -24,8 +40,8 @@ pub enum TypeAst {
 #[derive(Debug, Clone, PartialEq)]
 pub enum StatementAst {
     Expression(ExpressionAst),
-    Print,
-    Var(TypeAst, String, Value),
+    Print(ExpressionAst),
+    Var(TypeAst, String, ExpressionAst),
     Block,
     If,
     While,

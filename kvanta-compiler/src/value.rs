@@ -10,9 +10,10 @@ pub struct Function {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Float(f32),
-    Boolean(bool),
+    Bool(bool),
     Nil,
-    String(i32),
+    String(String),
+    Variable(String),
     Function(i32),
 }
 

@@ -1,2 +1,4 @@
-array<int,3> a = 3;
-float dd dd = 45.6;
+array<int,3> a = 3 + 2 * 8 + 4;
+float dd = 45.6;
+hello(39);
+print(5);

@@ -735,6 +735,12 @@ use crate::scanner::Scanner;
 
 // }
 
+struct Compiler {
+
+}
+
+
+
 
 pub fn compile(source: String, common: &mut CommonMemory) -> Result<ProgramAst, String> {
     let mut scanner = Scanner::new(&source);

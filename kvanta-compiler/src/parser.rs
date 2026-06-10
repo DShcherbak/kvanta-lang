@@ -1,7 +1,6 @@
-
 #![allow(dead_code)]
 
-use crate::{ast::{ExpressionAst, ProgramAst, StatementAst, TypeAst}, chunk::{Chunk, OpCode}, scanner::{Token, TokenType}, value::{new_function, Function, Value}, vm::CommonMemory};
+use crate::{ast::{BinaryOperator, ExpressionAst, ProgramAst, StatementAst, TypeAst, UnaryOperator}, chunk::{Chunk, OpCode}, scanner::{Token, TokenType}, value::{new_function, Function, Value}, vm::CommonMemory};
 
 // This is a macros that receives the tokenizer, token type, and an error message.
 // It checks if the current token type matches the expected token type, and if it does, it advances the tokenizer.
@@ -59,8 +58,8 @@ impl Precedence {
 }
 
 struct ParseRule {
-    prefix: Option<fn(&mut Parser<'_, '_>, bool)>,
-    infix: Option<fn(&mut Parser<'_, '_>, bool)>,
+    prefix: Option<fn(&mut Parser<'_, '_>, bool) -> Result<(), String>>,
+    infix: Option<fn(&mut Parser<'_, '_>, bool)-> Result<(), String>>,
     precedence: Precedence,
 }
 
@@ -199,6 +198,7 @@ pub struct Parser<'src, 'a> {
     locals: Vec<LocalVariable>,
     scope_depth: usize,
     common: &'a mut CommonMemory,
+    precedence_stack: Vec<ExpressionAst>,
 }
 
 impl<'src, 'a> Parser<'src, 'a> {
@@ -210,6 +210,7 @@ impl<'src, 'a> Parser<'src, 'a> {
             locals: vec![],
             scope_depth: 0,
             common,
+            precedence_stack: vec![]
         }
     }
 
@@ -386,7 +387,7 @@ impl<'src, 'a> Parser<'src, 'a> {
         let can_assign = precedence <= Precedence::Assignment;
         let prefix_rule = get_rule(&self.tokenizer.previous.token_type).prefix;
         if let Some(prefix_rule) = prefix_rule {
-            prefix_rule(self, can_assign);
+            prefix_rule(self, can_assign)?;
         } else {
             return Err(self.error_at_current("Expect expression."));
         }
@@ -395,14 +396,17 @@ impl<'src, 'a> Parser<'src, 'a> {
             self.tokenizer.advance();
             let infix_rule = get_rule(&self.tokenizer.previous.token_type).infix;
             if let Some(infix_rule) = infix_rule {
-                infix_rule(self, can_assign);
+                infix_rule(self, can_assign)?;
             }
         }
 
         if !can_assign && self.tokenizer.match_token(TokenType::Equal) {
             return Err(self.error_at_current("Invalid assignment target."));
         }
-        Ok(ExpressionAst {})
+        if self.precedence_stack.is_empty() {
+            return Err(self.error_at_current("Unrecognized error parsing expression."));
+        }
+        Ok(self.precedence_stack.pop().unwrap())
     }
 
     
@@ -419,9 +423,8 @@ impl<'src, 'a> Parser<'src, 'a> {
         let type_token = self.variable_type()?;
         let global_var_id = self.parse_variable("Expect variable name.");
         consume!(self, TokenType::Equal, "Expect '=' after variable declaration.");
-        let expr = self.number()?;
+        let expr = self.expression()?;
         consume!(self, TokenType::Semicolon, "Expect ';' after variable declaration.");
-       // self.define_variable(global_var_id);
         Ok(StatementAst::Var(type_token, global_var_id, expr))
     }
 
@@ -438,7 +441,7 @@ impl<'src, 'a> Parser<'src, 'a> {
             self.tokenizer.consume(TokenType::Less, "Expect '<' after array type.");
             let inner_type = self.variable_type()?;
             self.tokenizer.consume(TokenType::Comma, "Expect ',' after array inner type.");
-            let array_size = self.number()?;
+            let array_size = self.solo_number()?;
             self.tokenizer.consume(TokenType::Greater, "Expect '>' after array type.");
             Ok(TypeAst::Array(Box::new(inner_type), array_size))
         } else {
@@ -451,19 +454,9 @@ impl<'src, 'a> Parser<'src, 'a> {
         self.tokenizer.previous.lexeme.to_string()
     }
 
-    fn identifier_constant(&mut self, name: String) -> usize {
-        let string_id = self.take_string(name);
-        let id = self.make_constant(Value::String(string_id));
-        if id > u8::MAX as usize {
-            self.error_at_current("Too many constants in one chunk.");
-            return 0;
-        }
-        id
-    }
-
     fn statement(&mut self) -> Result<StatementAst, String> {
-        // if self.tokenizer.match_token(TokenType::Print) {
-        //     self.print_statement()
+        if self.tokenizer.match_token(TokenType::Print) {
+            self.print_statement()
         // } else if self.tokenizer.match_token(TokenType::For) {
         //     self.for_statement()
         // } else if self.tokenizer.match_token(TokenType::If) {
@@ -474,9 +467,9 @@ impl<'src, 'a> Parser<'src, 'a> {
         //     self.while_statement()
         // } else if self.tokenizer.match_token(TokenType::LeftBrace) {
         //     self.block()
-        // } else {
+        } else {
             self.expression_statement()
-        // }
+        }
         //Err("No statements implemented yet.".to_string())
     }
 
@@ -664,10 +657,12 @@ impl<'src, 'a> Parser<'src, 'a> {
         self.scope_depth -= 1;
     }
 
-    fn print_statement(&mut self) -> StatementAst {
-        self.expression();
-        self.tokenizer.consume(TokenType::Semicolon, "Expect ';' after value.");
-        StatementAst::Print
+    fn print_statement(&mut self) -> Result<StatementAst, String> {
+        consume!(self, TokenType::LeftParen, "Expect '(' after 'print'.");
+        let expr = self.expression()?;
+        consume!(self, TokenType::RightParen, "Expect ')' after value.");
+        consume!(self, TokenType::Semicolon, "Expect ';' after the print statement.");
+        Ok(StatementAst::Print(expr))
     }
 
     fn expression_statement(&mut self) -> Result<StatementAst, String> {
@@ -675,12 +670,19 @@ impl<'src, 'a> Parser<'src, 'a> {
         consume!(self, TokenType::Semicolon, "Expect ';' after expression.");
         Ok(StatementAst::Expression(e))
     }
-    
-    fn number(&mut self) -> Result<Value,String> {
+
+    fn solo_number(&mut self) -> Result<Value,String> {
         let num_token = self.tokenizer.pop();
         num_token.lexeme.parse::<f32>()
             .map(|x| Value::Float(x))
             .map_err(|_| self.error_at(&num_token, "Expect number."))
+    }
+
+    fn number(&mut self) -> Result<(), String> {
+        let n = self.tokenizer.previous.lexeme.parse::<f32>().unwrap(); // parsed as Number token can be
+                                                                        // just unwraped
+        self.precedence_stack.push(ExpressionAst::Value(Value::Float(n)));
+        Ok(())
     }
 
     fn copy_string(&mut self, s: &str) -> i32 {
@@ -698,146 +700,99 @@ impl<'src, 'a> Parser<'src, 'a> {
         (self.common.functions.len() - 1) as i32
     }
 
-    fn string(&mut self) {
-        let value = self.copy_string(self.tokenizer.previous.lexeme);
-        self.emit_constant(Value::String(value));
+    fn string(&mut self) -> Result<(), String> {
+        self.precedence_stack.push(ExpressionAst::Value(Value::String(self.tokenizer.previous.lexeme.to_string())));
+        Ok(())
     }
 
-    fn literal(&mut self) {
+    fn literal(&mut self) -> Result<(), String> {
         match self.tokenizer.previous.token_type {
-            TokenType::False => self.emit_byte(OpCode::False as u8),
-            TokenType::True => self.emit_byte(OpCode::True as u8),
-            TokenType::Nil => self.emit_byte(OpCode::Nil as u8),
+            TokenType::False => self.precedence_stack.push(ExpressionAst::Value(Value::Bool(false))),
+            TokenType::True => self.precedence_stack.push(ExpressionAst::Value(Value::Bool(true))),
+            TokenType::Nil => self.precedence_stack.push(ExpressionAst::Value(Value::Nil)),
             _ => (),
         }
+        Ok(())
     }
 
-    fn grouping(&mut self) {
-        self.expression();
-        self.tokenizer.consume(TokenType::RightParen, "Expect ')' after expression.");
+    fn grouping(&mut self) -> Result<(), String> {
+        let expr = self.expression()?;
+        self.precedence_stack.push(expr);
+        consume!(self,TokenType::RightParen, "Expect ')' after expression.");
+        Ok(())
     }
 
-    fn unary(&mut self) {
+    fn unary(&mut self) -> Result<(), String> {
         let operator_type = self.tokenizer.previous.token_type.clone();
-        self.parse_precedence(Precedence::Unary);
+        let expr = self.parse_precedence(Precedence::Unary)?;
         match operator_type {
-            TokenType::Minus => self.emit_byte(OpCode::Negate as u8),
-            TokenType::Bang => self.emit_byte(OpCode::Not as u8),
-            _ => (),
+            TokenType::Minus => self.precedence_stack.push(ExpressionAst::Unary(UnaryOperator::Minus, Box::new(expr))),
+            TokenType::Bang => self.precedence_stack.push(ExpressionAst::Unary(UnaryOperator::Bang, Box::new(expr))),
+            _ => return Err(self.error_at_current("Not a unary operator.")),
         }
+        Ok(())
     }
 
-    fn binary(&mut self) {
+    fn binary(&mut self) -> Result<(), String> {
         let operator_type = self.tokenizer.previous.token_type.clone();
         let rule = get_rule(&operator_type);
-        self.parse_precedence(rule.precedence.next().unwrap());
+        let rhs = self.parse_precedence(rule.precedence.next().unwrap())?;
+        let lhs = self.precedence_stack.pop().unwrap();
 
         match operator_type {
-            TokenType::Plus => self.emit_byte(OpCode::Add as u8),
-            TokenType::Minus => self.emit_byte(OpCode::Subtract as u8),
-            TokenType::Star => self.emit_byte(OpCode::Multiply as u8),
-            TokenType::Slash => self.emit_byte(OpCode::Divide as u8),
-            TokenType::BangEqual => self.emit_bytes(OpCode::Equal as u8, OpCode::Not as u8), // TODO: Implement OpNotEqual
-            TokenType::EqualEqual => self.emit_byte(OpCode::Equal as u8),
-            TokenType::Greater => self.emit_byte(OpCode::Greater as u8),
-            TokenType::GreaterEqual => self.emit_bytes(OpCode::Less as u8, OpCode::Not as u8),
-            TokenType::Less => self.emit_byte(OpCode::Less as u8),
-            TokenType::LessEqual => self.emit_bytes(OpCode::Greater as u8, OpCode::Not as u8),
+            TokenType::Plus => self.precedence_stack.push(ExpressionAst::Binary(BinaryOperator::Plus, Box::new(lhs), Box::new(rhs))),
+            TokenType::Minus => self.precedence_stack.push(ExpressionAst::Binary(BinaryOperator::Minus, Box::new(lhs), Box::new(rhs))),
+            TokenType::Star => self.precedence_stack.push(ExpressionAst::Binary(BinaryOperator::Mult, Box::new(lhs), Box::new(rhs))),
+            TokenType::Slash => self.precedence_stack.push(ExpressionAst::Binary(BinaryOperator::Divide, Box::new(lhs), Box::new(rhs))),
+            // TokenType::BangEqual => self.precedence_stack.push(ExpressionAst::Binary(BinaryOperator::BangEqual, Box::new(lhs), Box::new(rhs))),
+            // TokenType::EqualEqual => self.precedence_stack.push(ExpressionAst::Binary(BinaryOperator::EqualEqual, Box::new(lhs), Box::new(rhs))),
+            // TokenType::Greater => self.precedence_stack.push(ExpressionAst::Binary(BinaryOperator::Greater, Box::new(lhs), Box::new(rhs))),
+            // TokenType::GreaterEqual => self.precedence_stack.push(ExpressionAst::Binary(BinaryOperator::GreaterEqual, Box::new(lhs), Box::new(rhs))),
+            // TokenType::Less => self.precedence_stack.push(ExpressionAst::Binary(BinaryOperator::Less, Box::new(lhs), Box::new(rhs))),
+            // TokenType::LessEqual => self.precedence_stack.push(ExpressionAst::Binary(BinaryOperator::LessEqual, Box::new(lhs), Box::new(rhs))),
             _ => (),
         }
+        Ok(())
     }
 
-    fn variable(&mut self, can_assign: bool) {
-        self.named_variable(self.tokenizer.previous.lexeme.to_string(), can_assign);
+    fn variable(&mut self, can_assign: bool) -> Result<(), String> {
+        self.precedence_stack.push(ExpressionAst::Value(Value::Variable(self.tokenizer.previous.lexeme.to_string())));
+        Ok(())
     }
 
-    fn named_variable(&mut self, name: String, can_assign: bool) {
-        let mut set = OpCode::SetGlobal as u8;
-        let mut get = OpCode::GetGlobal as u8;
-        let id : u8 = {
-            if let Some(idx) = self.resolve_local(&name) {
-                set = OpCode::SetLocal as u8;
-                get = OpCode::GetLocal as u8;
-                idx
-            } else {
-                self.identifier_constant(name) as u8
-            }
-        };
-        
-        if can_assign && self.tokenizer.match_token(TokenType::Equal) {
-           self.expression();
-           self.emit_bytes(set, id);
-       } else {
-            self.emit_bytes(get, id); 
-       }
-    }
-
-    fn resolve_local(&mut self, name: &str) -> Option<u8> {
-        let mut res : Option<(u8, Option<usize>)> = None;
-        for (i, local) in self.locals.iter().enumerate().rev() {
-            if local.name == name {
-                res = Some((i as u8, local.depth));
-                break;
-            }
-        }
-        
-        match res {
-            None => None,
-            Some((idx, depth)) => {
-                if depth.is_none() {
-                    self.error_at_current("Can't read local variable in its own initializer.");
-                    None
-                } else {
-                    Some(idx)
-                }
-            }
-        }
-    }
-
-    fn argument_list(&mut self) -> usize {
+    fn argument_list(&mut self) -> Result<usize, String> {
         let mut arg_count = 0;
         if !self.tokenizer.check(TokenType::RightParen) {
             loop {
                 self.expression();
                 arg_count += 1;
                 if arg_count > u8::MAX as usize {
-                    self.error_at_current("Can't have more than 255 arguments.");
+                    return Err(self.error_at_current("Can't have more than 255 arguments."));
                 }
                 if !self.tokenizer.match_token(TokenType::Comma) {
                     break;
                 }
             }
         }
-        self.tokenizer.consume(TokenType::RightParen, "Expect ')' after arguments.");
-        arg_count
+        consume!(self, TokenType::RightParen, "Expect ')' after arguments.");
+        Ok(arg_count)
     }
 
-    fn call(&mut self) {
-        let arg_count = self.argument_list();
+    fn call(&mut self) -> Result<(), String> {
+        let arg_count = self.argument_list()?;
         if arg_count > u8::MAX as usize {
-            self.error_at_current("Can't have more than 255 arguments.");
+            return Err(self.error_at_current("Can't have more than 255 arguments."));
         }
-        self.emit_bytes(OpCode::Call as u8, arg_count as u8);
+        let callee = self.precedence_stack.pop().unwrap();
+        self.precedence_stack.push(
+            ExpressionAst::Binary(
+                BinaryOperator::Call, 
+                Box::new(callee), 
+                Box::new(ExpressionAst::Value(Value::Float(arg_count as f32)))
+            )
+        );
+        Ok(())
     }
-
-    fn and(&mut self) {
-        let end_jump = self.emit_jump(OpCode::JumpIfFalse);
-        self.emit_byte(OpCode::Pop as u8);
-        self.parse_precedence(Precedence::And);
-        self.patch_jump(end_jump);
-    }
-
-    fn or(&mut self) {
-        let else_jump = self.emit_jump(OpCode::JumpIfFalse);
-        let end_jump = self.emit_jump(OpCode::Jump);
-
-        self.patch_jump(else_jump);
-        self.emit_byte(OpCode::Pop as u8);
-
-        self.parse_precedence(Precedence::Or);
-        self.patch_jump(end_jump);
-    }
-
 }
 
 
@@ -864,8 +819,8 @@ fn get_rule(token_type: &TokenType) -> ParseRule {
         TokenType::LessEqual => ParseRule { prefix: None, infix: Some(|p, _| p.binary()), precedence: Precedence::Comparison },
         TokenType::Identifier => ParseRule { prefix: Some(|p, can_assign| p.variable(can_assign)), infix: None, precedence: Precedence::None },
         TokenType::String => ParseRule { prefix: Some(|p, _| p.string()), infix: None, precedence: Precedence::None },
-        TokenType::Number => ParseRule { prefix: Some(|_, _| ()/*p.number()*/), infix: None, precedence: Precedence::None },
-        TokenType::And => ParseRule { prefix: None, infix: Some(|p, _| p.and()), precedence: Precedence::And },
+        TokenType::Number => ParseRule { prefix: Some(|p, _| p.number()), infix: None, precedence: Precedence::None },
+        TokenType::And => ParseRule { prefix: None, infix: Some(|p, _| p.binary()), precedence: Precedence::And },
         TokenType::Class => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
         TokenType::Else => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
         TokenType::False => ParseRule { prefix: Some(|p, _| p.literal()), infix: None, precedence: Precedence::None },
@@ -873,7 +828,7 @@ fn get_rule(token_type: &TokenType) -> ParseRule {
         TokenType::Fun => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
         TokenType::If => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
         TokenType::Nil => ParseRule { prefix: Some(|p, _| p.literal()), infix: None, precedence: Precedence::None },
-        TokenType::Or => ParseRule { prefix: None, infix: Some(|p, _| p.or()), precedence: Precedence::Or },
+        TokenType::Or => ParseRule { prefix: None, infix: Some(|p, _| p.binary()), precedence: Precedence::Or },
         TokenType::Print => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
         TokenType::Return => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
         TokenType::Super => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
