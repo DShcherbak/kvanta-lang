@@ -15,8 +15,8 @@
 // }
 
 
-use crate::{ast::ProgramAst, chunk::{Chunk, OpCode}, parser::{Parser, Tokenizer}, value::{new_function, Function, Value}, vm::CommonMemory};
-use crate::scanner::{Scanner, Token, TokenType};
+use crate::{ast::ProgramAst, parser::{Parser, Tokenizer}, vm::CommonMemory};
+use crate::scanner::Scanner;
 
 // impl<'comp> Tokenizer<'comp> {
 //     fn error_at_current(&mut self, message: &str) {

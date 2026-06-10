@@ -1,4 +1,3 @@
-use std::f32::consts::E;
 
 use crate::{ast::{ExpressionAst, ProgramAst, StatementAst, TypeAst}, chunk::{Chunk, OpCode}, scanner::{Token, TokenType}, value::{new_function, Function, Value}, vm::CommonMemory};
 
@@ -251,6 +250,7 @@ impl<'src, 'a> Parser<'src, 'a> {
         &mut self.function.chunk
     }
 
+    
     fn compiled_function(&self) -> Function {
         self.function.clone()
     }
@@ -388,7 +388,7 @@ impl<'src, 'a> Parser<'src, 'a> {
     
 
     fn fun_declaration(&mut self) {
-        let global_var_id = self.parse_variable("Expect function name.");
+        let _global_var_id = self.parse_variable("Expect function name.");
         self.mark_initialized();
         self.function_type = FunctionType::Function;
         self.function();
@@ -407,23 +407,23 @@ impl<'src, 'a> Parser<'src, 'a> {
 
     fn variable_type(&mut self) -> TypeAst {
         if self.tokenizer.match_token(TokenType::Int) {
-            return TypeAst::Int;
+            TypeAst::Int
         } else if self.tokenizer.match_token(TokenType::Float) {
-            return TypeAst::Float;
+            TypeAst::Float
         } else if self.tokenizer.match_token(TokenType::Color) {
-            return TypeAst::Color;
+            TypeAst::Color
         } else if self.tokenizer.match_token(TokenType::Bool) {
-            return TypeAst::Bool;
+            TypeAst::Bool
         } else if self.tokenizer.match_token(TokenType::Array) {
             self.tokenizer.consume(TokenType::Less, "Expect '<' after array type.");
             let inner_type = self.variable_type();
             self.tokenizer.consume(TokenType::Comma, "Expect ',' after array inner type.");
             let array_size = self.expression();
             self.tokenizer.consume(TokenType::Greater, "Expect '>' after array type.");
-            return TypeAst::Array(Box::new(inner_type), array_size);
+            TypeAst::Array(Box::new(inner_type), array_size)
         } else {
             self.error_at_current("Expect variable type.");
-            return TypeAst::Int;
+            TypeAst::Int
         }
     }
 
@@ -603,7 +603,7 @@ impl<'src, 'a> Parser<'src, 'a> {
                 if self.function.arity > u8::MAX as usize {
                     self.error_at_current("Can't have more than 255 parameters.");
                 }
-                let name = self.parse_variable("Expect param name");
+                let _name = self.parse_variable("Expect param name");
                 //self.define_variable(name);
                 if !self.tokenizer.match_token(TokenType::Comma) {
                     break;

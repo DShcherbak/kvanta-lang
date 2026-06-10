@@ -89,7 +89,7 @@ impl VM {
     pub fn run(&mut self) -> InterpretResult {
         println!("====== MAIN EXECUTION ======");
         loop {
-            if let Some(code) = self.read_byte().and_then(|x| from(x)) {
+            if let Some(code) = self.read_byte().and_then(from) {
                 //println!("Executing: {:?}", code);
                 match code {
                     OpCode::Return => {
@@ -344,7 +344,6 @@ impl VM {
         });
         if self.frames.len() > 64 {
             self.runtime_error("Stack overflow.");
-            return;
         }
     }
 
