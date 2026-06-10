@@ -51,7 +51,11 @@ pub enum TokenType {
     Super,
     This,
     True,
-    Var,
+    Int,
+    Float,
+    Color,
+    Bool,
+    Array,
     While,
     Global,
 
@@ -140,8 +144,19 @@ impl<'comp> Scanner<'comp> {
 
     fn identifier_type(&self) -> TokenType {
         match self.source.chars().nth(self.start).unwrap_or('\0') {
-            'a' => self.check_keyword(1, "nd", TokenType::And),
-            'c' => self.check_keyword(1, "lass", TokenType::Class),
+            'a' => {
+                    if self.current - self.start > 1 {
+                        match self.source.chars().nth(self.start + 1).unwrap_or('\0') {
+                            'n' => self.check_keyword(2, "d", TokenType::And),
+                            'r' => self.check_keyword(2, "ray", TokenType::Array),
+                            _ => TokenType::Identifier,
+                        }
+                    } else {
+                        TokenType::Identifier
+                    } 
+            },
+            'b' => self.check_keyword(1, "ool", TokenType::Bool),
+            'c' => self.check_keyword(1, "olor", TokenType::Color),
             'e' => self.check_keyword(1, "lse", TokenType::Else),
             'f' => {
                 if self.current - self.start > 1 {
@@ -149,6 +164,7 @@ impl<'comp> Scanner<'comp> {
                         'a' => self.check_keyword(2, "lse", TokenType::False),
                         'o' => self.check_keyword(2, "r", TokenType::For),
                         'u' => self.check_keyword(2, "n", TokenType::Fun),
+                        'l' => self.check_keyword(2, "oat", TokenType::Float),
                         _ => TokenType::Identifier,
                     }
                 } else {
@@ -156,7 +172,17 @@ impl<'comp> Scanner<'comp> {
                 }
             }
             'g' => self.check_keyword(1, "lobal", TokenType::Global),
-            'i' => self.check_keyword(1, "f", TokenType::If),
+            'i' => {
+                if self.current - self.start > 1 {
+                    match self.source.chars().nth(self.start + 1).unwrap_or('\0') {
+                        'f' => self.check_keyword(2, "", TokenType::If),
+                        'n' => self.check_keyword(2, "t", TokenType::Int),
+                        _ => TokenType::Identifier,
+                    }
+                } else {
+                    TokenType::Identifier
+                }
+            },
             'n' => self.check_keyword(1, "il", TokenType::Nil),
             'o' => self.check_keyword(1, "r", TokenType::Or),
             'p' => self.check_keyword(1, "rint", TokenType::Print),
@@ -172,8 +198,7 @@ impl<'comp> Scanner<'comp> {
                 } else {
                     TokenType::Identifier
                 }
-            }
-            'v' => self.check_keyword(1, "ar", TokenType::Var),
+            },
             'w' => self.check_keyword(1, "hile", TokenType::While),
             _ => TokenType::Identifier,
         }

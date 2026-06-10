@@ -1,4 +1,6 @@
-use crate::{ast::ProgramAst, chunk::{Chunk, OpCode}, scanner::{Token, TokenType}, value::{new_function, Function, Value}, vm::CommonMemory};
+use std::f32::consts::E;
+
+use crate::{ast::{ExpressionAst, ProgramAst, StatementAst, TypeAst}, chunk::{Chunk, OpCode}, scanner::{Token, TokenType}, value::{new_function, Function, Value}, vm::CommonMemory};
 
 pub struct Tokenizer<'comp> {
     current: Token<'comp>,
@@ -113,6 +115,11 @@ impl<'comp> Tokenizer<'comp> {
         true
     }
 
+    fn is_type_token(&self) -> bool {
+        matches!(self.current.token_type, TokenType::Int | TokenType::Float | TokenType::Color
+             | TokenType::Bool | TokenType::Array)
+    }
+
     fn check(&self, token_type: TokenType) -> bool {
         self.current.token_type == token_type
     }
@@ -142,7 +149,7 @@ impl<'comp> Tokenizer<'comp> {
                 return;
             }
             match self.current.token_type {
-                TokenType::Class | TokenType::Fun | TokenType::Var | TokenType::For | TokenType::If | TokenType::While | TokenType::Print | TokenType::Return => return,
+                TokenType::Class | TokenType::Fun | TokenType::For | TokenType::If | TokenType::While | TokenType::Print | TokenType::Return => return,
                 _ => self.advance(),
             }
         }
@@ -185,6 +192,60 @@ impl<'src, 'a> Parser<'src, 'a> {
             common,
         }
     }
+
+    pub fn compile(&mut self) -> Result<ProgramAst, String> {
+
+        self.tokenizer.advance();
+        if self.tokenizer.current.token_type == TokenType::Fun || self.tokenizer.current.token_type == TokenType::Global {
+            self.forest()
+        } else {
+            self.script()
+        }
+        // while self.tokenizer.current.token_type != TokenType::Eof {
+        //     self.declaration();
+        // }
+        // self.end_compile();
+
+        //TODO: Handle errors properly
+        // if self.tokenizer.had_error {
+        //     Err("Compile error".to_string())
+        // } else {
+        //     Ok(ProgramAst::Forest)
+        // }
+    }
+
+    fn declaration(&mut self) -> Result<StatementAst, String> {
+        let result = if self.tokenizer.is_type_token() {
+            self.var_declaration()
+        } else {
+            self.statement()
+        };
+
+        if self.tokenizer.panic_mode {
+            self.tokenizer.synchronize();
+        }
+        Ok(result)
+    }
+
+    fn forest(&mut self) -> Result<ProgramAst, String> {
+        Ok(ProgramAst::Forest)
+    }
+
+    fn script(&mut self) -> Result<ProgramAst, String> {
+        let mut result : Vec<StatementAst> = vec![];
+        while self.tokenizer.current.token_type != TokenType::Eof {
+            result.push(self.declaration()?);
+        }
+        self.end_compile();
+
+        if self.tokenizer.had_error {
+            Err("Compile error".to_string())
+        } else {
+            Ok(ProgramAst::Script(result))
+        }
+    }
+
+    ///////////////////////////////////////////////////
 
     fn current_chunk(&mut self) -> &mut Chunk {
         &mut self.function.chunk
@@ -295,14 +356,15 @@ impl<'src, 'a> Parser<'src, 'a> {
         self.emit_byte(OpCode::Return as u8);
     }
 
-    fn expression(&mut self) {
+    fn expression(&mut self) -> ExpressionAst {
         self.parse_precedence(Precedence::Assignment);
+        ExpressionAst {}
     }
 
     fn parse_precedence(&mut self, precedence: Precedence) {
         self.tokenizer.advance();
         let can_assign = precedence <= Precedence::Assignment;
-        let prefix_rule = get_rule(self.tokenizer.previous.token_type.clone()).prefix;
+        let prefix_rule = get_rule(&self.tokenizer.previous.token_type).prefix;
         if let Some(prefix_rule) = prefix_rule {
             prefix_rule(self, can_assign);
         } else {
@@ -310,9 +372,9 @@ impl<'src, 'a> Parser<'src, 'a> {
             return;
         }
 
-        while precedence <= get_rule(self.tokenizer.current.token_type.clone()).precedence {
+        while precedence <= get_rule(&self.tokenizer.current.token_type).precedence {
             self.tokenizer.advance();
-            let infix_rule = get_rule(self.tokenizer.previous.token_type.clone()).infix;
+            let infix_rule = get_rule(&self.tokenizer.previous.token_type).infix;
             if let Some(infix_rule) = infix_rule {
                 infix_rule(self, can_assign);
             }
@@ -323,50 +385,51 @@ impl<'src, 'a> Parser<'src, 'a> {
         }
     }
 
-    fn declaration(&mut self) {
-        if self.tokenizer.match_token(TokenType::Fun) {
-            self.fun_declaration();
-        } else if self.tokenizer.match_token(TokenType::Var) {
-            self.var_declaration();
-        } else {
-            self.statement();
-        }
-
-        if self.tokenizer.panic_mode {
-            self.tokenizer.synchronize();
-        }
-    }
+    
 
     fn fun_declaration(&mut self) {
         let global_var_id = self.parse_variable("Expect function name.");
         self.mark_initialized();
         self.function_type = FunctionType::Function;
         self.function();
-        self.define_variable(global_var_id);
+        //self.define_variable(global_var_id);
     }
 
-    fn var_declaration(&mut self) {
+    fn var_declaration(&mut self) -> StatementAst {
+        let type_token = self.variable_type();
         let global_var_id = self.parse_variable("Expect variable name.");
-
-        if self.tokenizer.match_token(TokenType::Equal) {
-            self.expression();
-        } else {
-            self.emit_byte(OpCode::Nil as u8);
-        }
-
+        self.tokenizer.consume(TokenType::Equal, "Expect '=' after variable declaration.");
+        let expr = self.expression();
         self.tokenizer.consume(TokenType::Semicolon, "Expect ';' after variable declaration.");
-        self.define_variable(global_var_id);
+       // self.define_variable(global_var_id);
+        StatementAst::Var(type_token, global_var_id, expr)
     }
 
-    fn parse_variable(&mut self, error_message: &str) -> usize {
-        self.tokenizer.consume(TokenType::Identifier, error_message);
-
-        self.declare_variable();
-        if self.scope_depth > 0 {
-            return 0;
+    fn variable_type(&mut self) -> TypeAst {
+        if self.tokenizer.match_token(TokenType::Int) {
+            return TypeAst::Int;
+        } else if self.tokenizer.match_token(TokenType::Float) {
+            return TypeAst::Float;
+        } else if self.tokenizer.match_token(TokenType::Color) {
+            return TypeAst::Color;
+        } else if self.tokenizer.match_token(TokenType::Bool) {
+            return TypeAst::Bool;
+        } else if self.tokenizer.match_token(TokenType::Array) {
+            self.tokenizer.consume(TokenType::Less, "Expect '<' after array type.");
+            let inner_type = self.variable_type();
+            self.tokenizer.consume(TokenType::Comma, "Expect ',' after array inner type.");
+            let array_size = self.expression();
+            self.tokenizer.consume(TokenType::Greater, "Expect '>' after array type.");
+            return TypeAst::Array(Box::new(inner_type), array_size);
+        } else {
+            self.error_at_current("Expect variable type.");
+            return TypeAst::Int;
         }
+    }
 
-        self.identifier_constant(self.tokenizer.previous.lexeme.to_string())
+    fn parse_variable(&mut self, error_message: &str) -> String {
+        self.tokenizer.consume(TokenType::Identifier, error_message);
+        self.tokenizer.previous.lexeme.to_string()
     }
 
     fn identifier_constant(&mut self, name: String) -> usize {
@@ -379,56 +442,25 @@ impl<'src, 'a> Parser<'src, 'a> {
         id
     }
 
-    pub fn compile(&mut self) -> Result<ProgramAst, String> {
-
-        self.tokenizer.advance();
-        if self.tokenizer.current.token_type == TokenType::Fun || self.tokenizer.current.token_type == TokenType::Global {
-            self.forest()
-        } else {
-            self.script()
-        }
-        // while self.tokenizer.current.token_type != TokenType::Eof {
-        //     self.declaration();
-        // }
-        // self.end_compile();
-
-        //TODO: Handle errors properly
-        // if self.tokenizer.had_error {
-        //     Err("Compile error".to_string())
-        // } else {
-        //     Ok(ProgramAst::Forest)
-        // }
-    }
-
-    fn forest(&mut self) -> Result<ProgramAst, String> {
-        Ok(ProgramAst::Forest)
-    }
-
-    fn script(&mut self) -> Result<ProgramAst, String> {
-        Ok(ProgramAst::Script)
-    }
-
-    fn statement(&mut self) {
+    fn statement(&mut self) -> StatementAst {
         if self.tokenizer.match_token(TokenType::Print) {
-            self.print_statement();
+            self.print_statement()
         } else if self.tokenizer.match_token(TokenType::For) {
-            self.for_statement();
+            self.for_statement()
         } else if self.tokenizer.match_token(TokenType::If) {
-            self.if_statement();
+            self.if_statement()
         } else if self.tokenizer.match_token(TokenType::Return) {
-            self.return_statement();
+            self.return_statement()
         } else if self.tokenizer.match_token(TokenType::While) {
-            self.while_statement();
+            self.while_statement()
         } else if self.tokenizer.match_token(TokenType::LeftBrace) {
-            self.begin_scope();
-            self.block();
-            self.end_scope();
+            self.block()
         } else {
-            self.expression_statement();
+            self.expression_statement()
         }
     }
 
-    fn return_statement(&mut self) {
+    fn return_statement(&mut self) -> StatementAst {
         if self.function_type == FunctionType::Script {
             self.error_at_current("Can't return from top-level code.");
         }
@@ -439,15 +471,16 @@ impl<'src, 'a> Parser<'src, 'a> {
             self.tokenizer.consume(TokenType::Semicolon, "Expect ';' after return value.");
         }
         self.emit_byte(OpCode::Return as u8);
+        StatementAst::Return
     }
 
-    fn for_statement(&mut self) {
+    fn for_statement(&mut self) -> StatementAst {
         self.begin_scope();
         self.tokenizer.consume(TokenType::LeftParen, "Expect '(' after 'for'.");
 
         if self.tokenizer.match_token(TokenType::Semicolon) {
             // No initializer.
-        } else if self.tokenizer.match_token(TokenType::Var) {
+        } else if self.tokenizer.is_type_token() {
             self.var_declaration();
         } else {
             self.expression_statement();
@@ -486,9 +519,10 @@ impl<'src, 'a> Parser<'src, 'a> {
         }
 
         self.end_scope();
+        StatementAst::For
     }
 
-    fn while_statement(&mut self) {
+    fn while_statement(&mut self) -> StatementAst {
         let loop_start = self.current_chunk().len();
         self.tokenizer.consume(TokenType::LeftParen, "Expect '(' after 'while'.");
         self.expression();
@@ -501,6 +535,7 @@ impl<'src, 'a> Parser<'src, 'a> {
 
         self.patch_jump(exit_jump);
         self.emit_byte(OpCode::Pop as u8);
+        StatementAst::While
     }
 
     fn emit_loop(&mut self, loop_start: usize) {
@@ -513,7 +548,7 @@ impl<'src, 'a> Parser<'src, 'a> {
         self.emit_byte((offset & 0xff) as u8);
     }
 
-    fn if_statement(&mut self) {
+    fn if_statement(&mut self) -> StatementAst {
         self.tokenizer.consume(TokenType::LeftParen, "Expect '(' after 'if'.");
         self.expression();
         self.tokenizer.consume(TokenType::RightParen, "Expect ')' after condition.");
@@ -530,6 +565,7 @@ impl<'src, 'a> Parser<'src, 'a> {
             self.statement();
         }
         self.patch_jump(else_jump);
+        StatementAst::If
     }
 
     fn emit_jump(&mut self, instruction: OpCode) -> usize {
@@ -549,12 +585,13 @@ impl<'src, 'a> Parser<'src, 'a> {
         self.current_chunk().chunk[offset + 1] = (jump & 0xff) as u8;
     }
 
-    fn block(&mut self) {
+    fn block(&mut self) -> StatementAst {
         while !self.tokenizer.check(TokenType::RightBrace) && self.tokenizer.current.token_type != TokenType::Eof {
-            self.declaration();
+            let _ = self.declaration();
         }
 
         self.tokenizer.consume(TokenType::RightBrace, "Expect '}' after block.");
+        StatementAst::Block
     }
 
     fn inner_function(&mut self) {
@@ -567,7 +604,7 @@ impl<'src, 'a> Parser<'src, 'a> {
                     self.error_at_current("Can't have more than 255 parameters.");
                 }
                 let name = self.parse_variable("Expect param name");
-                self.define_variable(name);
+                //self.define_variable(name);
                 if !self.tokenizer.match_token(TokenType::Comma) {
                     break;
                 }
@@ -607,16 +644,17 @@ impl<'src, 'a> Parser<'src, 'a> {
         self.scope_depth -= 1;
     }
 
-    fn print_statement(&mut self) {
+    fn print_statement(&mut self) -> StatementAst {
         self.expression();
         self.tokenizer.consume(TokenType::Semicolon, "Expect ';' after value.");
-        self.emit_byte(OpCode::Print as u8);
+        StatementAst::Print
     }
 
-    fn expression_statement(&mut self) {
+    fn expression_statement(&mut self) -> StatementAst {
         self.expression();
         self.tokenizer.consume(TokenType::Semicolon, "Expect ';' after expression.");
         self.emit_byte(OpCode::Pop as u8);
+        StatementAst::Expression(ExpressionAst {})
     }
     
     fn number(&mut self) {
@@ -670,7 +708,7 @@ impl<'src, 'a> Parser<'src, 'a> {
 
     fn binary(&mut self) {
         let operator_type = self.tokenizer.previous.token_type.clone();
-        let rule = get_rule(operator_type.clone());
+        let rule = get_rule(&operator_type);
         self.parse_precedence(rule.precedence.next().unwrap());
 
         match operator_type {
@@ -782,7 +820,7 @@ impl<'src, 'a> Parser<'src, 'a> {
 }
 
 
-fn get_rule(token_type: TokenType) -> ParseRule {
+fn get_rule(token_type: &TokenType) -> ParseRule {
     match token_type {
         TokenType::LeftParen => ParseRule { prefix: Some(|p, _| p.grouping()), infix: Some(|p, _| p.call()), precedence: Precedence::Call },
         TokenType::RightParen => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
@@ -820,7 +858,11 @@ fn get_rule(token_type: TokenType) -> ParseRule {
         TokenType::Super => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
         TokenType::This => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
         TokenType::True => ParseRule { prefix: Some(|p, _| p.literal()), infix: None, precedence: Precedence::None },
-        TokenType::Var => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
+        TokenType::Int => ParseRule { prefix: Some(|p, _| p.literal()), infix: None, precedence: Precedence::None },
+        TokenType::Float => ParseRule { prefix: Some(|p, _| p.literal()), infix: None, precedence: Precedence::None },
+        TokenType::Color => ParseRule { prefix: Some(|p, _| p.literal()), infix: None, precedence: Precedence::None },
+        TokenType::Bool => ParseRule { prefix: Some(|p, _| p.literal()), infix: None, precedence: Precedence::None },
+        TokenType::Array => ParseRule { prefix: Some(|p, _| p.literal()), infix: None, precedence: Precedence::None },
         TokenType::While => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
         TokenType::Global => ParseRule { prefix: None, infix: None, precedence: Precedence::None },
         TokenType::Eof => ParseRule { prefix: None, infix: None, precedence: Precedence::None },

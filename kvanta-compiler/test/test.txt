@@ -1,7 +1,1 @@
-global fun add(a, b) {
-    return inc(a) + b;
-}
-
-fun inc(a) { return a + 1; }
-
-print add(2, 3);
+array<int,> a = 3;
