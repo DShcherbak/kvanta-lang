@@ -1,8 +1,6 @@
 
 #![allow(dead_code)]
 
-use core::error;
-
 use crate::{ast::{ExpressionAst, ProgramAst, StatementAst, TypeAst}, chunk::{Chunk, OpCode}, scanner::{Token, TokenType}, value::{new_function, Function, Value}, vm::CommonMemory};
 
 // This is a macros that receives the tokenizer, token type, and an error message.
@@ -101,6 +99,11 @@ impl<'comp> Tokenizer<'comp> {
             }
             self.error_at_current(self.current.lexeme);
         }
+    }
+
+    fn pop(&mut self) -> Token<'comp> {
+        self.advance();
+        self.previous.clone()
     }
 
     fn next_token(&mut self) -> Token<'comp> {
@@ -211,7 +214,6 @@ impl<'src, 'a> Parser<'src, 'a> {
     }
 
     pub fn compile(&mut self) -> Result<ProgramAst, String> {
-
         self.tokenizer.advance();
         if self.tokenizer.current.token_type == TokenType::Fun || self.tokenizer.current.token_type == TokenType::Global {
             self.forest()
@@ -376,11 +378,10 @@ impl<'src, 'a> Parser<'src, 'a> {
     }
 
     fn expression(&mut self) -> Result<ExpressionAst, String> {
-        self.parse_precedence(Precedence::Assignment);
-        Ok(ExpressionAst {})
+        self.parse_precedence(Precedence::Assignment)
     }
 
-    fn parse_precedence(&mut self, precedence: Precedence) {
+    fn parse_precedence(&mut self, precedence: Precedence)-> Result<ExpressionAst, String> {
         self.tokenizer.advance();
         let can_assign = precedence <= Precedence::Assignment;
         let prefix_rule = get_rule(&self.tokenizer.previous.token_type).prefix;
@@ -474,9 +475,9 @@ impl<'src, 'a> Parser<'src, 'a> {
         // } else if self.tokenizer.match_token(TokenType::LeftBrace) {
         //     self.block()
         // } else {
-        //     self.expression_statement()
+            self.expression_statement()
         // }
-        Err("No statements implemented yet.".to_string())
+        //Err("No statements implemented yet.".to_string())
     }
 
     fn return_statement(&mut self) -> StatementAst {
@@ -676,9 +677,10 @@ impl<'src, 'a> Parser<'src, 'a> {
     }
     
     fn number(&mut self) -> Result<Value,String> {
-        self.tokenizer.previous.lexeme.parse::<f32>()
+        let num_token = self.tokenizer.pop();
+        num_token.lexeme.parse::<f32>()
             .map(|x| Value::Float(x))
-            .map_err(|_| "Expected a number.".into())
+            .map_err(|_| self.error_at(&num_token, "Expect number."))
     }
 
     fn copy_string(&mut self, s: &str) -> i32 {

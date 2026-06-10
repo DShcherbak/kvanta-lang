@@ -1,1 +1,2 @@
-array<int,> a = 3;
+array<int,3> a = 3;
+float dd = = 45.6;
