@@ -1,5 +1,3 @@
-use crate::value::Value;
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum ProgramAst {
     Forest,
@@ -22,8 +20,16 @@ pub enum BinaryOperator {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum AstValue {
+    Float(f32),
+    Bool(bool),
+    String(String),
+    Variable(String),
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum ExpressionAst {
-    Value(Value),
+    Value(AstValue),
     Unary(UnaryOperator, Box<ExpressionAst>),
     Binary(BinaryOperator, Box<ExpressionAst>, Box<ExpressionAst>)
 }
@@ -34,7 +40,7 @@ pub enum TypeAst {
     Float,
     Color,
     Bool,
-    Array(Box<TypeAst>, Value),
+    Array(Box<TypeAst>, AstValue),
 }
 
 #[derive(Debug, Clone, PartialEq)]

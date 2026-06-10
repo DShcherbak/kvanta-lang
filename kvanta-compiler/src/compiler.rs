@@ -15,7 +15,7 @@
 // }
 
 
-use crate::{ast::ProgramAst, parser::{Parser, Tokenizer}, vm::CommonMemory};
+use crate::{ast::{AstValue, ExpressionAst, ProgramAst, StatementAst}, chunk::{Chunk, OpCode}, parser::{LocalVariable, Parser, Tokenizer}, value::{Function, Value}, vm::CommonMemory};
 use crate::scanner::Scanner;
 
 // impl<'comp> Tokenizer<'comp> {
@@ -243,19 +243,9 @@ use crate::scanner::Scanner;
 //         self.emit_byte(byte2);
 //     }
 
-//     pub fn make_constant(&mut self, value: Value) -> usize {
-//         self.common.constants.push(value);
-//         self.common.constants.len() - 1
-//     }
 
-//     fn emit_constant(&mut self, value: Value) {
-//         let constant = self.make_constant(value);
-//         if constant > u8::MAX as usize {
-//             self.error_at_current("Too many constants in one chunk.");
-//             return;
-//         }
-//         self.emit_bytes(OpCode::Constant as u8, constant as u8);
-//     }
+
+    
 
 //     fn end_compile(&mut self) {
 //         self.tokenizer.consume(TokenType::Eof, "Expect end of expression.");
@@ -339,7 +329,7 @@ use crate::scanner::Scanner;
 
 //     fn identifier_constant(&mut self, name: String) -> usize {
 //         let string_id = self.take_string(name);
-//         let id = self.make_constant(Value::String(string_id));
+//         let id = self.make_constant(AstValue::String(string_id));
 //         if id > u8::MAX as usize {
 //             self.error_at_current("Too many constants in one chunk.");
 //             return 0;
@@ -545,7 +535,7 @@ use crate::scanner::Scanner;
 //             next_parser.compiled_function()
 //         };
 //         let fun_id = self.take_function(next_function);
-//         let function_id = self.make_constant(Value::Function(fun_id));
+//         let function_id = self.make_constant(AstValue::Function(fun_id));
 //         self.emit_bytes(OpCode::Constant as u8, function_id as u8);
 //     }
 
@@ -575,7 +565,7 @@ use crate::scanner::Scanner;
     
 //     fn number(&mut self) {
 //         let value = self.tokenizer.previous.lexeme.parse::<f32>().unwrap();
-//         self.emit_constant(Value::Float(value));
+//         self.emit_constant(AstValue::Float(value));
 //     }
 
 //     fn copy_string(&mut self, s: &str) -> i32 {
@@ -595,7 +585,7 @@ use crate::scanner::Scanner;
 
 //     fn string(&mut self) {
 //         let value = self.copy_string(self.tokenizer.previous.lexeme);
-//         self.emit_constant(Value::String(value));
+//         self.emit_constant(AstValue::String(value));
 //     }
 
 //     fn literal(&mut self) {
@@ -735,18 +725,143 @@ use crate::scanner::Scanner;
 
 // }
 
-struct Compiler {
+struct Compiler<'comp> {
+    function: Function,
+    common: &'comp mut CommonMemory,
+    locals: Vec<LocalVariable>,
+}
+
+impl<'comp> Compiler<'comp> {
+    pub fn new(common: &'comp mut CommonMemory) -> Self {
+        Compiler { 
+            function: Function { 
+                arity: 0, 
+                chunk: Chunk::new(), 
+                name: "MAIN_SCRIPT".into() 
+            },
+            common: common,
+            locals: vec![],
+        }
+    }
+
+    pub fn compile(&mut self, ast: ProgramAst) -> Result<Function, String> {
+        match ast {
+            ProgramAst::Forest => {
+                self.function.chunk.push(42, 1);
+                self.function.chunk.push_code(OpCode::Print, 1);
+            },
+            ProgramAst::Script(statement_asts) => {
+                for statement in statement_asts {
+                    self.statement(statement);
+                }
+                self.emit_byte(OpCode::Return as u8);
+            },
+        };
+        Ok(self.function.clone())
+    }
+
+    fn statement(&mut self, statement: StatementAst) {
+        match statement {
+            StatementAst::Expression(expression_ast) => todo!(),
+            StatementAst::Print(expression_ast) => self.print(expression_ast),
+            StatementAst::Var(type_ast, _, expression_ast) => todo!(),
+            StatementAst::Block => todo!(),
+            StatementAst::If => todo!(),
+            StatementAst::While => todo!(),
+            StatementAst::For => todo!(),
+            StatementAst::Function => todo!(),
+            StatementAst::Return => todo!(),
+        }
+    }
+
+    fn print(&mut self, expr: ExpressionAst) {
+        self.expression(expr);
+        self.function.chunk.push_code(OpCode::Print, 1);
+    }
+
+    fn expression(&mut self, expr: ExpressionAst) {
+        match expr {
+            ExpressionAst::Value(value) => self.value(value),
+            ExpressionAst::Unary(op, operand) => {
+                self.expression(*operand);
+                match op {
+                    crate::ast::UnaryOperator::Bang => self.emit_byte(OpCode::Not as u8),
+                    crate::ast::UnaryOperator::Minus => self.emit_byte(OpCode::Negate as u8),
+                }
+            },
+            ExpressionAst::Binary(op, lhs, rhs) => {
+                self.expression(*lhs);
+                self.expression(*rhs);
+                match op {
+                    crate::ast::BinaryOperator::Plus => self.emit_byte(OpCode::Add as u8),
+                    crate::ast::BinaryOperator::Minus => self.emit_byte(OpCode::Subtract as u8),
+                    crate::ast::BinaryOperator::Mult => self.emit_byte(OpCode::Multiply as u8),
+                    crate::ast::BinaryOperator::Divide => self.emit_byte(OpCode::Divide as u8),
+                    crate::ast::BinaryOperator::Call => todo!(),
+                }
+            },
+        }
+    }
+
+    fn value(&mut self, value: AstValue) {
+        match value {
+            AstValue::Float(_) | AstValue::Bool(_) => self.emit_constant(value),
+            AstValue::String(_) => todo!(),
+            AstValue::Variable(_) => todo!(),
+        }
+    }   
+
+    fn emit_constant(&mut self, value: AstValue) {
+        let constant = self.make_constant(value);
+        if constant > u8::MAX as usize {
+            //self.error_at_current("Too many constants in one chunk.");
+            return;
+        }
+        self.emit_bytes(OpCode::Constant as u8, constant as u8);
+    }
+
+    fn add_local(&mut self, name: String) {
+        if self.locals.len() >= u8::MAX as usize {
+            //self.error_at_current("Too many local variables in function.");
+            return;
+        }
+        self.locals.push(LocalVariable { name: name, depth: None });
+    }
+
+    fn current_chunk(&mut self) -> &mut Chunk {
+        &mut self.function.chunk
+    }
+
+    fn emit_byte(&mut self, byte: u8) {
+        let line = 1;//self.tokenizer.previous.line;
+        self.current_chunk().push(byte, line);
+    }
+
+    fn emit_bytes(&mut self, byte1: u8, byte2: u8) {
+        self.emit_byte(byte1);
+        self.emit_byte(byte2);
+    }
+
+    pub fn make_constant(&mut self, value: AstValue) -> usize {
+        match value {
+            AstValue::Float(f) => self.common.constants.push(Value::Float(f)),
+            AstValue::Bool(b) => self.common.constants.push(Value::Bool(b)),
+            AstValue::String(_) => todo!(),
+            AstValue::Variable(_) => todo!(),
+        }
+        
+        self.common.constants.len() - 1
+    }
 
 }
 
-
-
-
-pub fn compile(source: String, common: &mut CommonMemory) -> Result<ProgramAst, String> {
+pub fn compile(source: String, common: &mut CommonMemory) -> Result<Function, String> {
     let mut scanner = Scanner::new(&source);
     let tokens = scanner.scan_tokens();
     let mut tokenizer = Tokenizer::new(tokens);
-    let mut parser = Parser::new(&mut tokenizer, common);
+    let mut parser = Parser::new(&mut tokenizer);
 
-    parser.compile()
+    let ast = parser.compile()?;
+    let mut compiler = Compiler::new(common);
+    compiler.compile(ast)
 }

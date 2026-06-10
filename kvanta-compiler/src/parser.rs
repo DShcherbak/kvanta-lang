@@ -1,10 +1,7 @@
 #![allow(dead_code)]
 
-use crate::{ast::{BinaryOperator, ExpressionAst, ProgramAst, StatementAst, TypeAst, UnaryOperator}, chunk::{Chunk, OpCode}, scanner::{Token, TokenType}, value::{new_function, Function, Value}, vm::CommonMemory};
+use crate::{ast::{AstValue, BinaryOperator, ExpressionAst, ProgramAst, StatementAst, TypeAst, UnaryOperator}, chunk::{Chunk, OpCode}, scanner::{Token, TokenType}, value::{new_function, Function, Value}, vm::CommonMemory};
 
-// This is a macros that receives the tokenizer, token type, and an error message.
-// It checks if the current token type matches the expected token type, and if it does, it advances the tokenizer.
-// Else it produces return Err(error message).
 macro_rules! consume {
     ($self:expr, $token_type:pat, $message:expr) => {
         if let $token_type = $self.tokenizer.current.token_type {
@@ -181,8 +178,8 @@ impl<'comp> Tokenizer<'comp> {
 
 #[derive(Debug)]
 pub struct LocalVariable {
-    name: String,
-    depth: Option<usize>,
+    pub name: String,
+    pub depth: Option<usize>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -195,21 +192,17 @@ pub struct Parser<'src, 'a> {
     function_type: FunctionType,
     function: Function,
     tokenizer: &'a mut Tokenizer<'src>,
-    locals: Vec<LocalVariable>,
     scope_depth: usize,
-    common: &'a mut CommonMemory,
     precedence_stack: Vec<ExpressionAst>,
 }
 
 impl<'src, 'a> Parser<'src, 'a> {
-    pub fn new(tokenizer: &'a mut Tokenizer<'src>, common: &'a mut CommonMemory) -> Self {
+    pub fn new(tokenizer: &'a mut Tokenizer<'src>) -> Self {
         Parser {
             function_type: FunctionType::Script,
             function: new_function("MAIN_SCRIPT".to_string()),
             tokenizer,
-            locals: vec![],
             scope_depth: 0,
-            common,
             precedence_stack: vec![]
         }
     }
@@ -256,7 +249,7 @@ impl<'src, 'a> Parser<'src, 'a> {
         while self.tokenizer.current.token_type != TokenType::Eof {
             result.push(self.declaration()?);
         }
-        self.end_compile();
+        //self.end_compile();
 
         if self.tokenizer.had_error {
             Err("Compile error".to_string())
@@ -267,9 +260,7 @@ impl<'src, 'a> Parser<'src, 'a> {
 
     ///////////////////////////////////////////////////
 
-    fn current_chunk(&mut self) -> &mut Chunk {
-        &mut self.function.chunk
-    }
+    
 
     
     fn compiled_function(&self) -> Function {
@@ -299,84 +290,68 @@ impl<'src, 'a> Parser<'src, 'a> {
         error_message
     }
 
-    fn define_variable(&mut self, global: usize) {
-        if self.scope_depth > 0 {
-            self.mark_initialized();
-            return;
-        }
-        self.emit_bytes(OpCode::DefineGlobal as u8, global as u8);
-    }
+    // fn define_variable(&mut self, global: usize) {
+    //     if self.scope_depth > 0 {
+    //         self.mark_initialized();
+    //         return;
+    //     }
+    //     self.emit_bytes(OpCode::DefineGlobal as u8, global as u8);
+    // }
 
-    fn declare_variable(&mut self) {
-        if self.scope_depth == 0 {
-            return;
-        }
+    // fn declare_variable(&mut self) {
+    //     if self.scope_depth == 0 {
+    //         return;
+    //     }
 
-        let mut duplicate_found = false;
-        for local in self.locals.iter().rev() {
-            if let Some(d) = local.depth && d < self.scope_depth {
-                break;
-            }
-            if local.name == self.tokenizer.previous.lexeme {
-                duplicate_found = true;
-                break;
-            }
-        }
+    //     let mut duplicate_found = false;
+    //     for local in self.locals.iter().rev() {
+    //         if let Some(d) = local.depth && d < self.scope_depth {
+    //             break;
+    //         }
+    //         if local.name == self.tokenizer.previous.lexeme {
+    //             duplicate_found = true;
+    //             break;
+    //         }
+    //     }
         
-        if duplicate_found {
-            self.error_at_current("Already a variable with this name in this scope.");
-        }
-        self.add_local(self.tokenizer.previous.clone());
-    }
+    //     if duplicate_found {
+    //         self.error_at_current("Already a variable with this name in this scope.");
+    //     }
+    //     self.add_local(self.tokenizer.previous.clone());
+    // }
 
-    fn mark_initialized(&mut self) {
-        if self.scope_depth == 0 {
-            return;
-        }
+    // fn mark_initialized(&mut self) {
+    //     if self.scope_depth == 0 {
+    //         return;
+    //     }
 
-        match self.locals.last_mut() {
-            None => (),
-            Some(local) => local.depth = Some(self.scope_depth),
-        }
-    }
+    //     match self.locals.last_mut() {
+    //         None => (),
+    //         Some(local) => local.depth = Some(self.scope_depth),
+    //     }
+    // }
 
-    fn add_local(&mut self, name: Token) {
-        if self.locals.len() >= u8::MAX as usize {
-            self.error_at_current("Too many local variables in function.");
-            return;
-        }
-        self.locals.push(LocalVariable { name: name.lexeme.to_string(), depth: None });
-    }
+    
 
-    fn emit_byte(&mut self, byte: u8) {
-        let line = self.tokenizer.previous.line;
-        self.current_chunk().push(byte, line);
-    }
+    // pub fn make_constant(&mut self, value: Value) -> usize {
+    //     self.common.constants.push(value);
+    //     self.common.constants.len() - 1
+    // }
 
-    fn emit_bytes(&mut self, byte1: u8, byte2: u8) {
-        self.emit_byte(byte1);
-        self.emit_byte(byte2);
-    }
+    // fn emit_constant(&mut self, value: Value) {
+    //     let constant = self.make_constant(value);
+    //     if constant > u8::MAX as usize {
+    //         self.error_at_current("Too many constants in one chunk.");
+    //         return;
+    //     }
+    //     self.emit_bytes(OpCode::Constant as u8, constant as u8);
+    // }
 
-    pub fn make_constant(&mut self, value: Value) -> usize {
-        self.common.constants.push(value);
-        self.common.constants.len() - 1
-    }
-
-    fn emit_constant(&mut self, value: Value) {
-        let constant = self.make_constant(value);
-        if constant > u8::MAX as usize {
-            self.error_at_current("Too many constants in one chunk.");
-            return;
-        }
-        self.emit_bytes(OpCode::Constant as u8, constant as u8);
-    }
-
-    fn end_compile(&mut self) {
-        self.tokenizer.consume(TokenType::Eof, "Expect end of expression.");
-        self.emit_byte(OpCode::Nil as u8);
-        self.emit_byte(OpCode::Return as u8);
-    }
+    // fn end_compile(&mut self) {
+    //     self.tokenizer.consume(TokenType::Eof, "Expect end of expression.");
+    //     self.emit_byte(OpCode::Nil as u8);
+    //     self.emit_byte(OpCode::Return as u8);
+    // }
 
     fn expression(&mut self) -> Result<ExpressionAst, String> {
         self.parse_precedence(Precedence::Assignment)
@@ -413,7 +388,7 @@ impl<'src, 'a> Parser<'src, 'a> {
 
     fn fun_declaration(&mut self) {
         let _global_var_id = self.parse_variable("Expect function name.");
-        self.mark_initialized();
+       // self.mark_initialized();
         self.function_type = FunctionType::Function;
         self.function();
         //self.define_variable(global_var_id);
@@ -473,130 +448,130 @@ impl<'src, 'a> Parser<'src, 'a> {
         //Err("No statements implemented yet.".to_string())
     }
 
-    fn return_statement(&mut self) -> StatementAst {
-        if self.function_type == FunctionType::Script {
-            self.error_at_current("Can't return from top-level code.");
-        }
-        if self.tokenizer.match_token(TokenType::Semicolon) {
-            self.emit_byte(OpCode::Nil as u8);
-        } else {
-            self.expression();
-            self.tokenizer.consume(TokenType::Semicolon, "Expect ';' after return value.");
-        }
-        self.emit_byte(OpCode::Return as u8);
-        StatementAst::Return
-    }
+    // fn return_statement(&mut self) -> StatementAst {
+    //     if self.function_type == FunctionType::Script {
+    //         self.error_at_current("Can't return from top-level code.");
+    //     }
+    //     if self.tokenizer.match_token(TokenType::Semicolon) {
+    //         self.emit_byte(OpCode::Nil as u8);
+    //     } else {
+    //         self.expression();
+    //         self.tokenizer.consume(TokenType::Semicolon, "Expect ';' after return value.");
+    //     }
+    //     self.emit_byte(OpCode::Return as u8);
+    //     StatementAst::Return
+    // }
 
-    fn for_statement(&mut self) -> StatementAst {
-        self.begin_scope();
-        self.tokenizer.consume(TokenType::LeftParen, "Expect '(' after 'for'.");
+    // fn for_statement(&mut self) -> StatementAst {
+    //     self.begin_scope();
+    //     self.tokenizer.consume(TokenType::LeftParen, "Expect '(' after 'for'.");
 
-        if self.tokenizer.match_token(TokenType::Semicolon) {
-            // No initializer.
-        } else if self.tokenizer.is_type_token() {
-            self.var_declaration();
-        } else {
-            self.expression_statement();
-        }
+    //     if self.tokenizer.match_token(TokenType::Semicolon) {
+    //         // No initializer.
+    //     } else if self.tokenizer.is_type_token() {
+    //         self.var_declaration();
+    //     } else {
+    //         self.expression_statement();
+    //     }
 
-        let mut loop_start = self.current_chunk().len();
+    //     let mut loop_start = self.current_chunk().len();
 
-        let exit_jump = if !self.tokenizer.match_token(TokenType::Semicolon) {
-            self.expression();
-            self.tokenizer.consume(TokenType::Semicolon, "Expect ';' after loop condition.");
-            let r = self.emit_jump(OpCode::JumpIfFalse);
-            self.emit_byte(OpCode::Pop as u8);
-            r
-        } else {
-            0
-        };
+    //     let exit_jump = if !self.tokenizer.match_token(TokenType::Semicolon) {
+    //         self.expression();
+    //         self.tokenizer.consume(TokenType::Semicolon, "Expect ';' after loop condition.");
+    //         let r = self.emit_jump(OpCode::JumpIfFalse);
+    //         self.emit_byte(OpCode::Pop as u8);
+    //         r
+    //     } else {
+    //         0
+    //     };
 
-        if !self.tokenizer.match_token(TokenType::RightParen) {
-            let body_jump = self.emit_jump(OpCode::Jump);
-            let increment_start = self.current_chunk().len();
-            self.expression();
-            self.emit_byte(OpCode::Pop as u8);
-            self.tokenizer.consume(TokenType::RightParen, "Expect ')' after for clauses.");
+    //     if !self.tokenizer.match_token(TokenType::RightParen) {
+    //         let body_jump = self.emit_jump(OpCode::Jump);
+    //         let increment_start = self.current_chunk().len();
+    //         self.expression();
+    //         self.emit_byte(OpCode::Pop as u8);
+    //         self.tokenizer.consume(TokenType::RightParen, "Expect ')' after for clauses.");
 
-            self.emit_loop(loop_start);
-            loop_start = increment_start;
-            self.patch_jump(body_jump);
-        }
+    //         self.emit_loop(loop_start);
+    //         loop_start = increment_start;
+    //         self.patch_jump(body_jump);
+    //     }
 
-        self.statement();
-        self.emit_loop(loop_start);
+    //     self.statement();
+    //     self.emit_loop(loop_start);
 
-        if exit_jump != 0 {
-            self.patch_jump(exit_jump);
-            self.emit_byte(OpCode::Pop as u8);
-        }
+    //     if exit_jump != 0 {
+    //         self.patch_jump(exit_jump);
+    //         self.emit_byte(OpCode::Pop as u8);
+    //     }
 
-        self.end_scope();
-        StatementAst::For
-    }
+    //     self.end_scope();
+    //     StatementAst::For
+    // }
 
-    fn while_statement(&mut self) -> StatementAst {
-        let loop_start = self.current_chunk().len();
-        self.tokenizer.consume(TokenType::LeftParen, "Expect '(' after 'while'.");
-        self.expression();
-        self.tokenizer.consume(TokenType::RightParen, "Expect ')' after condition.");
+    // fn while_statement(&mut self) -> StatementAst {
+    //     let loop_start = self.current_chunk().len();
+    //     self.tokenizer.consume(TokenType::LeftParen, "Expect '(' after 'while'.");
+    //     self.expression();
+    //     self.tokenizer.consume(TokenType::RightParen, "Expect ')' after condition.");
 
-        let exit_jump = self.emit_jump(OpCode::JumpIfFalse);
-        self.emit_byte(OpCode::Pop as u8);
-        self.statement();
-        self.emit_loop(loop_start);
+    //     let exit_jump = self.emit_jump(OpCode::JumpIfFalse);
+    //     self.emit_byte(OpCode::Pop as u8);
+    //     self.statement();
+    //     self.emit_loop(loop_start);
 
-        self.patch_jump(exit_jump);
-        self.emit_byte(OpCode::Pop as u8);
-        StatementAst::While
-    }
+    //     self.patch_jump(exit_jump);
+    //     self.emit_byte(OpCode::Pop as u8);
+    //     StatementAst::While
+    // }
 
-    fn emit_loop(&mut self, loop_start: usize) {
-        let offset = self.current_chunk().len() - loop_start + 3;
-        if offset > u16::MAX as usize {
-            self.error_at_current("Loop body too large.");
-        }
-        self.emit_byte(OpCode::Loop as u8);
-        self.emit_byte(((offset >> 8) & 0xff) as u8);
-        self.emit_byte((offset & 0xff) as u8);
-    }
+    // fn emit_loop(&mut self, loop_start: usize) {
+    //     let offset = self.current_chunk().len() - loop_start + 3;
+    //     if offset > u16::MAX as usize {
+    //         self.error_at_current("Loop body too large.");
+    //     }
+    //     self.emit_byte(OpCode::Loop as u8);
+    //     self.emit_byte(((offset >> 8) & 0xff) as u8);
+    //     self.emit_byte((offset & 0xff) as u8);
+    // }
 
-    fn if_statement(&mut self) -> StatementAst {
-        self.tokenizer.consume(TokenType::LeftParen, "Expect '(' after 'if'.");
-        self.expression();
-        self.tokenizer.consume(TokenType::RightParen, "Expect ')' after condition.");
-        let then_jump = self.emit_jump(OpCode::JumpIfFalse);
+    // fn if_statement(&mut self) -> StatementAst {
+    //     self.tokenizer.consume(TokenType::LeftParen, "Expect '(' after 'if'.");
+    //     self.expression();
+    //     self.tokenizer.consume(TokenType::RightParen, "Expect ')' after condition.");
+    //     let then_jump = self.emit_jump(OpCode::JumpIfFalse);
 
-        self.emit_byte(OpCode::Pop as u8);
-        self.statement();
+    //     self.emit_byte(OpCode::Pop as u8);
+    //     self.statement();
 
-        let else_jump = self.emit_jump(OpCode::Jump);
-        self.patch_jump(then_jump);
-        self.emit_byte(OpCode::Pop as u8);
+    //     let else_jump = self.emit_jump(OpCode::Jump);
+    //     self.patch_jump(then_jump);
+    //     self.emit_byte(OpCode::Pop as u8);
 
-        if self.tokenizer.match_token(TokenType::Else) {
-            self.statement();
-        }
-        self.patch_jump(else_jump);
-        StatementAst::If
-    }
+    //     if self.tokenizer.match_token(TokenType::Else) {
+    //         self.statement();
+    //     }
+    //     self.patch_jump(else_jump);
+    //     StatementAst::If
+    // }
 
-    fn emit_jump(&mut self, instruction: OpCode) -> usize {
-        self.emit_byte(instruction as u8);
-        self.emit_byte(0xff);
-        self.emit_byte(0xff);
-        self.current_chunk().len() - 2
-    }
+    // fn emit_jump(&mut self, instruction: OpCode) -> usize {
+    //     self.emit_byte(instruction as u8);
+    //     self.emit_byte(0xff);
+    //     self.emit_byte(0xff);
+    //     self.current_chunk().len() - 2
+    // }
 
-    fn patch_jump(&mut self, offset: usize) {
-        let jump = self.current_chunk().len() - offset - 2;
-        if jump > u16::MAX as usize {
-            self.error_at_current("Too much code to jump over.");
-        }
+    // fn patch_jump(&mut self, offset: usize) {
+    //     let jump = self.current_chunk().len() - offset - 2;
+    //     if jump > u16::MAX as usize {
+    //         self.error_at_current("Too much code to jump over.");
+    //     }
 
-        self.current_chunk().chunk[offset] = ((jump >> 8) & 0xff) as u8;
-        self.current_chunk().chunk[offset + 1] = (jump & 0xff) as u8;
-    }
+    //     self.current_chunk().chunk[offset] = ((jump >> 8) & 0xff) as u8;
+    //     self.current_chunk().chunk[offset + 1] = (jump & 0xff) as u8;
+    // }
 
     fn block(&mut self) -> StatementAst {
         while !self.tokenizer.check(TokenType::RightBrace) && self.tokenizer.current.token_type != TokenType::Eof {
@@ -634,28 +609,28 @@ impl<'src, 'a> Parser<'src, 'a> {
 
     fn function(&mut self) {
         let next_function = {
-            let mut next_parser = Parser::new(self.tokenizer, self.common);
+            let mut next_parser = Parser::new(self.tokenizer);
             next_parser.function_type = FunctionType::Function;
             next_parser.get_function_name();
             next_parser.inner_function();
             next_parser.compiled_function()
         };
-        let fun_id = self.take_function(next_function);
-        let function_id = self.make_constant(Value::Function(fun_id));
-        self.emit_bytes(OpCode::Constant as u8, function_id as u8);
+        //let fun_id = self.take_function(next_function);
+        //let function_id = self.make_constant(AstValue::Function(fun_id));
+        //self.emit_bytes(OpCode::Constant as u8, function_id as u8);
     }
 
     fn begin_scope(&mut self) {
         self.scope_depth += 1;
     }
 
-    fn end_scope(&mut self) {
-        while !self.locals.is_empty() && self.locals.last().unwrap().depth == Some(self.scope_depth) {
-            self.emit_byte(OpCode::Pop as u8);
-            self.locals.pop();
-        }
-        self.scope_depth -= 1;
-    }
+    // fn end_scope(&mut self) {
+    //     while !self.locals.is_empty() && self.locals.last().unwrap().depth == Some(self.scope_depth) {
+    //         self.emit_byte(OpCode::Pop as u8);
+    //         self.locals.pop();
+    //     }
+    //     self.scope_depth -= 1;
+    // }
 
     fn print_statement(&mut self) -> Result<StatementAst, String> {
         consume!(self, TokenType::LeftParen, "Expect '(' after 'print'.");
@@ -671,45 +646,44 @@ impl<'src, 'a> Parser<'src, 'a> {
         Ok(StatementAst::Expression(e))
     }
 
-    fn solo_number(&mut self) -> Result<Value,String> {
+    fn solo_number(&mut self) -> Result<AstValue,String> {
         let num_token = self.tokenizer.pop();
         num_token.lexeme.parse::<f32>()
-            .map(|x| Value::Float(x))
+            .map(|x| AstValue::Float(x))
             .map_err(|_| self.error_at(&num_token, "Expect number."))
     }
 
     fn number(&mut self) -> Result<(), String> {
         let n = self.tokenizer.previous.lexeme.parse::<f32>().unwrap(); // parsed as Number token can be
                                                                         // just unwraped
-        self.precedence_stack.push(ExpressionAst::Value(Value::Float(n)));
+        self.precedence_stack.push(ExpressionAst::Value(AstValue::Float(n)));
         Ok(())
     }
 
-    fn copy_string(&mut self, s: &str) -> i32 {
-        self.common.heap.push(s.to_string());
-        (self.common.heap.len() - 1) as i32
-    }
+    // fn copy_string(&mut self, s: &str) -> i32 {
+    //     self.common.heap.push(s.to_string());
+    //     (self.common.heap.len() - 1) as i32
+    // }
 
-    fn take_string(&mut self, s: String) -> i32 {
-        self.common.heap.push(s);
-        (self.common.heap.len() - 1) as i32
-    }
+    // fn take_string(&mut self, s: String) -> i32 {
+    //     self.common.heap.push(s);
+    //     (self.common.heap.len() - 1) as i32
+    // }
 
-    fn take_function(&mut self, f: Function) -> i32 {
-        self.common.functions.push(f);
-        (self.common.functions.len() - 1) as i32
-    }
+    // fn take_function(&mut self, f: Function) -> i32 {
+    //     self.common.functions.push(f);
+    //     (self.common.functions.len() - 1) as i32
+    // }
 
     fn string(&mut self) -> Result<(), String> {
-        self.precedence_stack.push(ExpressionAst::Value(Value::String(self.tokenizer.previous.lexeme.to_string())));
+        self.precedence_stack.push(ExpressionAst::Value(AstValue::String(self.tokenizer.previous.lexeme.to_string())));
         Ok(())
     }
 
     fn literal(&mut self) -> Result<(), String> {
         match self.tokenizer.previous.token_type {
-            TokenType::False => self.precedence_stack.push(ExpressionAst::Value(Value::Bool(false))),
-            TokenType::True => self.precedence_stack.push(ExpressionAst::Value(Value::Bool(true))),
-            TokenType::Nil => self.precedence_stack.push(ExpressionAst::Value(Value::Nil)),
+            TokenType::False => self.precedence_stack.push(ExpressionAst::Value(AstValue::Bool(false))),
+            TokenType::True => self.precedence_stack.push(ExpressionAst::Value(AstValue::Bool(true))),
             _ => (),
         }
         Ok(())
@@ -756,7 +730,7 @@ impl<'src, 'a> Parser<'src, 'a> {
     }
 
     fn variable(&mut self, can_assign: bool) -> Result<(), String> {
-        self.precedence_stack.push(ExpressionAst::Value(Value::Variable(self.tokenizer.previous.lexeme.to_string())));
+        self.precedence_stack.push(ExpressionAst::Value(AstValue::Variable(self.tokenizer.previous.lexeme.to_string())));
         Ok(())
     }
 
@@ -788,7 +762,7 @@ impl<'src, 'a> Parser<'src, 'a> {
             ExpressionAst::Binary(
                 BinaryOperator::Call, 
                 Box::new(callee), 
-                Box::new(ExpressionAst::Value(Value::Float(arg_count as f32)))
+                Box::new(ExpressionAst::Value(AstValue::Float(arg_count as f32)))
             )
         );
         Ok(())

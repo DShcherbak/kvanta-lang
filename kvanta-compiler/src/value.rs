@@ -12,8 +12,7 @@ pub enum Value {
     Float(f32),
     Bool(bool),
     Nil,
-    String(String),
-    Variable(String),
+    String(i32),
     Function(i32),
 }
 

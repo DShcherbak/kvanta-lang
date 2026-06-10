@@ -3,6 +3,7 @@ use std::env;
 use kvanta_compiler::vm::InterpretResult;
 use kvanta_compiler::compiler::compile;
 use kvanta_compiler::vm::VM;
+use kvanta_compiler::debug::print;
 
 fn interpret(vm: &mut VM, source: String) -> InterpretResult {
     match compile(source, &mut vm.common) {
@@ -13,13 +14,12 @@ fn interpret(vm: &mut VM, source: String) -> InterpretResult {
         Ok(function) => {
             // DEBUG
             println!("Compiled function: {:?}", function);
-            // print(&function.chunk, &function.name, vm);
-            // for funct in vm.common.functions.iter() {
-            //     print(&funct.chunk, &funct.name, vm);
-            // }
-            // vm.call(function, 0);
-            // vm.run()
-            InterpretResult::Ok
+            print(&function.chunk, &function.name, vm);
+            for funct in vm.common.functions.iter() {
+                print(&funct.chunk, &funct.name, vm);
+            }
+            vm.call(function, 0);
+            vm.run()
         },
     }
 }
