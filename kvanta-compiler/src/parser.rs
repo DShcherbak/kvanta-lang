@@ -1,4 +1,6 @@
 
+#![allow(dead_code)]
+
 use crate::{ast::{ExpressionAst, ProgramAst, StatementAst, TypeAst}, chunk::{Chunk, OpCode}, scanner::{Token, TokenType}, value::{new_function, Function, Value}, vm::CommonMemory};
 
 pub struct Tokenizer<'comp> {
