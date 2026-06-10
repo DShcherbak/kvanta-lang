@@ -388,8 +388,7 @@ impl<'src, 'a> Parser<'src, 'a> {
         if let Some(prefix_rule) = prefix_rule {
             prefix_rule(self, can_assign);
         } else {
-            self.error_at_current("Expect expression.");
-            return;
+            return Err(self.error_at_current("Expect expression."));
         }
 
         while precedence <= get_rule(&self.tokenizer.current.token_type).precedence {
@@ -401,8 +400,9 @@ impl<'src, 'a> Parser<'src, 'a> {
         }
 
         if !can_assign && self.tokenizer.match_token(TokenType::Equal) {
-            self.error_at_current("Invalid assignment target.");
+            return Err(self.error_at_current("Invalid assignment target."));
         }
+        Ok(ExpressionAst {})
     }
 
     
@@ -418,9 +418,9 @@ impl<'src, 'a> Parser<'src, 'a> {
     fn var_declaration(&mut self) -> Result<StatementAst, String> {
         let type_token = self.variable_type()?;
         let global_var_id = self.parse_variable("Expect variable name.");
-        self.tokenizer.consume(TokenType::Equal, "Expect '=' after variable declaration.");
+        consume!(self, TokenType::Equal, "Expect '=' after variable declaration.");
         let expr = self.number()?;
-        self.tokenizer.consume(TokenType::Semicolon, "Expect ';' after variable declaration.");
+        consume!(self, TokenType::Semicolon, "Expect ';' after variable declaration.");
        // self.define_variable(global_var_id);
         Ok(StatementAst::Var(type_token, global_var_id, expr))
     }
