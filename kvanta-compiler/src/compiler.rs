@@ -15,7 +15,7 @@
 // }
 
 
-use crate::{ast::{AstValue, ExpressionAst, ProgramAst, StatementAst}, chunk::{Chunk, OpCode}, parser::{LocalVariable, Parser, Tokenizer}, value::{Function, Value}, vm::CommonMemory};
+use crate::{ast::{AstValue, BinaryOperator, ExpressionAst, ProgramAst, StatementAst, UnaryOperator}, chunk::{Chunk, OpCode}, parser::{LocalVariable, Parser, Tokenizer}, value::{Function, Value}, vm::CommonMemory};
 use crate::scanner::Scanner;
 
 // impl<'comp> Tokenizer<'comp> {
@@ -577,6 +577,31 @@ use crate::scanner::Scanner;
 //         arg_count
 //     }
 
+//     fn variable(&mut self, can_assign: bool) {
+//         self.named_variable(self.parser.previous.lexeme.to_string(), can_assign);
+//     }
+
+//     fn named_variable(&mut self, name: String, can_assign: bool) {
+//         let mut set = OpCode::SetGlobal as u8;
+//         let mut get = OpCode::GetGlobal as u8;
+//         let id : u8 = {
+//             if let Some(idx) = self.resolve_local(&name) {
+//                 set = OpCode::SetLocal as u8;
+//                 get = OpCode::GetLocal as u8;
+//                 idx
+//             } else {
+//                 self.identifier_constant(name) as u8
+//             }
+//         };
+        
+//         if can_assign && self.parser.match_token(TokenType::Equal) {
+//            self.expression();
+//            self.emit_bytes(set, id);
+//        } else {
+//             self.emit_bytes(get, id); 
+//        }
+//     }
+
 //     fn call(&mut self) {
 //         let arg_count = self.argument_list();
 //         if arg_count > u8::MAX as usize {
@@ -681,21 +706,42 @@ impl<'comp> Compiler<'comp> {
             ExpressionAst::Unary(op, operand) => {
                 self.expression(*operand);
                 match op {
-                    crate::ast::UnaryOperator::Bang => self.emit_byte(OpCode::Not as u8),
-                    crate::ast::UnaryOperator::Minus => self.emit_byte(OpCode::Negate as u8),
+                    UnaryOperator::Bang => self.emit_byte(OpCode::Not as u8),
+                    UnaryOperator::Minus => self.emit_byte(OpCode::Negate as u8),
                 }
             },
             ExpressionAst::Binary(op, lhs, rhs) => {
+                if op == BinaryOperator::Assign {
+                    self.assign(*lhs, *rhs);
+                    return;
+                }
                 self.expression(*lhs);
                 self.expression(*rhs);
                 match op {
-                    crate::ast::BinaryOperator::Plus => self.emit_byte(OpCode::Add as u8),
-                    crate::ast::BinaryOperator::Minus => self.emit_byte(OpCode::Subtract as u8),
-                    crate::ast::BinaryOperator::Mult => self.emit_byte(OpCode::Multiply as u8),
-                    crate::ast::BinaryOperator::Divide => self.emit_byte(OpCode::Divide as u8),
-                    crate::ast::BinaryOperator::Call => todo!(),
+                    BinaryOperator::Plus => self.emit_byte(OpCode::Add as u8),
+                    BinaryOperator::Minus => self.emit_byte(OpCode::Subtract as u8),
+                    BinaryOperator::Mult => self.emit_byte(OpCode::Multiply as u8),
+                    BinaryOperator::Divide => self.emit_byte(OpCode::Divide as u8),
+                    BinaryOperator::Assign => (),
+                    BinaryOperator::Call => todo!(),
                 }
             },
+        }
+    }
+
+    fn assign(&mut self, dest: ExpressionAst, expr: ExpressionAst) {
+        self.expression(expr);
+        if let ExpressionAst::Value(AstValue::Variable(name)) = dest {
+            if let Some(id) = self.resolve_local(&name) {
+                self.emit_bytes(OpCode::SetLocal as u8, id);
+            } else if let Some(id) = self.resolve_global(&name) {
+                self.emit_bytes(OpCode::SetGlobal as u8, id);
+            } else {
+                //self.error("Unknown variable");
+            }
+            self.emit_byte(OpCode::Pop as u8);
+        } else {
+            //self.error("Cannot assign to {} value", dest)
         }
     }
 
@@ -703,7 +749,15 @@ impl<'comp> Compiler<'comp> {
         match value {
             AstValue::Float(_) | AstValue::Bool(_) => self.emit_constant(value),
             AstValue::String(_) => todo!(),
-            AstValue::Variable(_) => todo!(),
+            AstValue::Variable(name) => {
+                if let Some(id) = self.resolve_local(&name) {
+                    self.emit_bytes(OpCode::GetLocal as u8, id);
+                } else if let Some(id) = self.resolve_global(&name) {
+                    self.emit_bytes(OpCode::GetGlobal as u8, id);
+                } else {
+                    // self.error unknown variable
+                }
+            },
         }
     }   
 
@@ -731,26 +785,26 @@ impl<'comp> Compiler<'comp> {
         self.identifier_constant(name)
     }
 
-    fn named_variable(&mut self, name: String, can_assign: bool) {
-        let mut set = OpCode::SetGlobal as u8;
-        let mut get = OpCode::GetGlobal as u8;
-        let id : u8 = {
-            if let Some(idx) = self.resolve_local(&name) {
-                set = OpCode::SetLocal as u8;
-                get = OpCode::GetLocal as u8;
-                idx
-            } else {
-                self.identifier_constant(name) as u8
-            }
-        };
+    // fn named_variable(&mut self, name: String, can_assign: bool) {
+    //     let mut set = OpCode::SetGlobal as u8;
+    //     let mut get = OpCode::GetGlobal as u8;
+    //     let id : u8 = {
+    //         if let Some(idx) = self.resolve_local(&name) {
+    //             set = OpCode::SetLocal as u8;
+    //             get = OpCode::GetLocal as u8;
+    //             idx
+    //         } else {
+    //             self.identifier_constant(name) as u8
+    //         }
+    //     };
         
-        //if can_assign && self.tokenizer.match_token(TokenType::Equal) {
-           //self.expression();
-           self.emit_bytes(set, id);
-       //} else {
-            self.emit_bytes(get, id); 
-      // }
-    }
+    //     //if can_assign && self.tokenizer.match_token(TokenType::Equal) {
+    //        //self.expression();
+    //        self.emit_bytes(set, id);
+    //    //} else {
+    //         self.emit_bytes(get, id); 
+    //   // }
+    // }
 
     fn resolve_local(&mut self, name: &str) -> Option<u8> {
         let mut res : Option<(u8, Option<usize>)> = None;
@@ -772,6 +826,10 @@ impl<'comp> Compiler<'comp> {
                 }
             }
         }
+    }
+
+    fn resolve_global(&mut self, name: &str) -> Option<u8> {
+        None
     }
 
     fn define_variable(&mut self, global: usize) {

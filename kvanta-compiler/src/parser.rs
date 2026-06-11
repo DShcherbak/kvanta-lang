@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use std::env::var;
+
 use crate::{ast::{AstValue, BinaryOperator, ExpressionAst, ProgramAst, StatementAst, TypeAst, UnaryOperator}, chunk::{Chunk, OpCode}, scanner::{Token, TokenType}, value::{new_function, Function, Value}, vm::CommonMemory};
 
 macro_rules! consume {
@@ -730,7 +732,17 @@ impl<'src, 'a> Parser<'src, 'a> {
     }
 
     fn variable(&mut self, can_assign: bool) -> Result<(), String> {
-        self.precedence_stack.push(ExpressionAst::Value(AstValue::Variable(self.tokenizer.previous.lexeme.to_string())));
+        let variable_value = ExpressionAst::Value(AstValue::Variable(self.tokenizer.previous.lexeme.to_string()));
+        if can_assign && self.tokenizer.match_token(TokenType::Equal) {
+            let expr = self.expression()?;
+            self.precedence_stack.push(ExpressionAst::Binary(
+                BinaryOperator::Assign, 
+                Box::new(variable_value), 
+                Box::new(expr)
+            ));
+            return Ok(());
+        }
+        self.precedence_stack.push(variable_value);
         Ok(())
     }
 

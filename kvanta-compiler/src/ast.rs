@@ -16,7 +16,8 @@ pub enum BinaryOperator {
     Minus,
     Mult,
     Divide,
-    Call
+    Assign,
+    Call,
 }
 
 #[derive(Debug, Clone, PartialEq)]
