@@ -184,46 +184,7 @@ use crate::scanner::Scanner;
 //         self.tokenizer.had_error = true;
 //     }
 
-//     fn define_variable(&mut self, global: usize) {
-//         if self.scope_depth > 0 {
-//             self.mark_initialized();
-//             return;
-//         }
-//         self.emit_bytes(OpCode::DefineGlobal as u8, global as u8);
-//     }
 
-//     fn declare_variable(&mut self) {
-//         if self.scope_depth == 0 {
-//             return;
-//         }
-
-//         let mut duplicate_found = false;
-//         for local in self.locals.iter().rev() {
-//             if let Some(d) = local.depth && d < self.scope_depth {
-//                 break;
-//             }
-//             if local.name == self.tokenizer.previous.lexeme {
-//                 duplicate_found = true;
-//                 break;
-//             }
-//         }
-        
-//         if duplicate_found {
-//             self.error_at_current("Already a variable with this name in this scope.");
-//         }
-//         self.add_local(self.tokenizer.previous.clone());
-//     }
-
-//     fn mark_initialized(&mut self) {
-//         if self.scope_depth == 0 {
-//             return;
-//         }
-
-//         match self.locals.last_mut() {
-//             None => (),
-//             Some(local) => local.depth = Some(self.scope_depth),
-//         }
-//     }
 
 //     fn add_local(&mut self, name: Token) {
 //         if self.locals.len() >= u8::MAX as usize {
@@ -303,39 +264,9 @@ use crate::scanner::Scanner;
 //         self.define_variable(global_var_id);
 //     }
 
-//     fn var_declaration(&mut self) {
-//         let global_var_id = self.parse_variable("Expect variable name.");
+    
 
-//         if self.tokenizer.match_token(TokenType::Equal) {
-//             self.expression();
-//         } else {
-//             self.emit_byte(OpCode::Nil as u8);
-//         }
 
-//         self.tokenizer.consume(TokenType::Semicolon, "Expect ';' after variable declaration.");
-//         self.define_variable(global_var_id);
-//     }
-
-//     fn parse_variable(&mut self, error_message: &str) -> usize {
-//         self.tokenizer.consume(TokenType::Identifier, error_message);
-
-//         self.declare_variable();
-//         if self.scope_depth > 0 {
-//             return 0;
-//         }
-
-//         self.identifier_constant(self.tokenizer.previous.lexeme.to_string())
-//     }
-
-//     fn identifier_constant(&mut self, name: String) -> usize {
-//         let string_id = self.take_string(name);
-//         let id = self.make_constant(AstValue::String(string_id));
-//         if id > u8::MAX as usize {
-//             self.error_at_current("Too many constants in one chunk.");
-//             return 0;
-//         }
-//         id
-//     }
 
 //     fn compile(&mut self) -> Result<Function, String> {
 //         self.tokenizer.advance();
@@ -539,17 +470,7 @@ use crate::scanner::Scanner;
 //         self.emit_bytes(OpCode::Constant as u8, function_id as u8);
 //     }
 
-//     fn begin_scope(&mut self) {
-//         self.scope_depth += 1;
-//     }
 
-//     fn end_scope(&mut self) {
-//         while !self.locals.is_empty() && self.locals.last().unwrap().depth == Some(self.scope_depth) {
-//             self.emit_byte(OpCode::Pop as u8);
-//             self.locals.pop();
-//         }
-//         self.scope_depth -= 1;
-//     }
 
 //     fn print_statement(&mut self) {
 //         self.expression();
@@ -568,15 +489,15 @@ use crate::scanner::Scanner;
 //         self.emit_constant(AstValue::Float(value));
 //     }
 
-//     fn copy_string(&mut self, s: &str) -> i32 {
-//         self.common.heap.push(s.to_string());
-//         (self.common.heap.len() - 1) as i32
-//     }
+    // fn copy_string(&mut self, s: &str) -> i32 {
+    //     self.common.heap.push(s.to_string());
+    //     (self.common.heap.len() - 1) as i32
+    // }
 
-//     fn take_string(&mut self, s: String) -> i32 {
-//         self.common.heap.push(s);
-//         (self.common.heap.len() - 1) as i32
-//     }
+    // fn take_string(&mut self, s: String) -> i32 {
+    //     self.common.heap.push(s);
+    //     (self.common.heap.len() - 1) as i32
+    // }
 
 //     fn take_function(&mut self, f: Function) -> i32 {
 //         self.common.functions.push(f);
@@ -636,48 +557,7 @@ use crate::scanner::Scanner;
 //         self.named_variable(self.tokenizer.previous.lexeme.to_string(), can_assign);
 //     }
 
-//     fn named_variable(&mut self, name: String, can_assign: bool) {
-//         let mut set = OpCode::SetGlobal as u8;
-//         let mut get = OpCode::GetGlobal as u8;
-//         let id : u8 = {
-//             if let Some(idx) = self.resolve_local(&name) {
-//                 set = OpCode::SetLocal as u8;
-//                 get = OpCode::GetLocal as u8;
-//                 idx
-//             } else {
-//                 self.identifier_constant(name) as u8
-//             }
-//         };
-        
-//         if can_assign && self.tokenizer.match_token(TokenType::Equal) {
-//            self.expression();
-//            self.emit_bytes(set, id);
-//        } else {
-//             self.emit_bytes(get, id); 
-//        }
-//     }
 
-//     fn resolve_local(&mut self, name: &str) -> Option<u8> {
-//         let mut res : Option<(u8, Option<usize>)> = None;
-//         for (i, local) in self.locals.iter().enumerate().rev() {
-//             if local.name == name {
-//                 res = Some((i as u8, local.depth));
-//                 break;
-//             }
-//         }
-        
-//         match res {
-//             None => None,
-//             Some((idx, depth)) => {
-//                 if depth.is_none() {
-//                     self.error_at_current("Can't read local variable in its own initializer.");
-//                     None
-//                 } else {
-//                     Some(idx)
-//                 }
-//             }
-//         }
-//     }
 
 //     fn argument_list(&mut self) -> usize {
 //         let mut arg_count = 0;
@@ -729,6 +609,7 @@ struct Compiler<'comp> {
     function: Function,
     common: &'comp mut CommonMemory,
     locals: Vec<LocalVariable>,
+    scope_depth: usize
 }
 
 impl<'comp> Compiler<'comp> {
@@ -741,6 +622,7 @@ impl<'comp> Compiler<'comp> {
             },
             common: common,
             locals: vec![],
+            scope_depth: 0,
         }
     }
 
@@ -751,20 +633,34 @@ impl<'comp> Compiler<'comp> {
                 self.function.chunk.push_code(OpCode::Print, 1);
             },
             ProgramAst::Script(statement_asts) => {
+                self.begin_scope();
                 for statement in statement_asts {
                     self.statement(statement);
                 }
+                self.end_scope();
                 self.emit_byte(OpCode::Return as u8);
             },
         };
         Ok(self.function.clone())
     }
 
+    fn begin_scope(&mut self) {
+        self.scope_depth += 1;
+    }
+
+    fn end_scope(&mut self) {
+        while !self.locals.is_empty() && self.locals.last().unwrap().depth == Some(self.scope_depth) {
+            self.emit_byte(OpCode::Pop as u8);
+            self.locals.pop();
+        }
+        self.scope_depth -= 1;
+    }
+
     fn statement(&mut self, statement: StatementAst) {
         match statement {
-            StatementAst::Expression(expression_ast) => todo!(),
-            StatementAst::Print(expression_ast) => self.print(expression_ast),
-            StatementAst::Var(type_ast, _, expression_ast) => todo!(),
+            StatementAst::Expression(expr) => self.expression(expr),
+            StatementAst::Print(expr) => self.print(expr),
+            StatementAst::Var(_, var_name, expr) => self.var_declaration(var_name, expr),
             StatementAst::Block => todo!(),
             StatementAst::If => todo!(),
             StatementAst::While => todo!(),
@@ -812,7 +708,7 @@ impl<'comp> Compiler<'comp> {
     }   
 
     fn emit_constant(&mut self, value: AstValue) {
-        let constant = self.make_constant(value);
+        let constant = self.make_constant_ast(value);
         if constant > u8::MAX as usize {
             //self.error_at_current("Too many constants in one chunk.");
             return;
@@ -820,12 +716,132 @@ impl<'comp> Compiler<'comp> {
         self.emit_bytes(OpCode::Constant as u8, constant as u8);
     }
 
-    fn add_local(&mut self, name: String) {
+    fn var_declaration(&mut self, name: String, expr: ExpressionAst) {
+        self.expression(expr);
+        let global_var_id = self.parse_variable(name);
+        self.define_variable(global_var_id);
+    }
+
+    fn parse_variable(&mut self, name: String) -> usize {
+        self.declare_variable(&name);
+        if self.scope_depth > 0 {
+            return 0;
+        }
+
+        self.identifier_constant(name)
+    }
+
+    fn named_variable(&mut self, name: String, can_assign: bool) {
+        let mut set = OpCode::SetGlobal as u8;
+        let mut get = OpCode::GetGlobal as u8;
+        let id : u8 = {
+            if let Some(idx) = self.resolve_local(&name) {
+                set = OpCode::SetLocal as u8;
+                get = OpCode::GetLocal as u8;
+                idx
+            } else {
+                self.identifier_constant(name) as u8
+            }
+        };
+        
+        //if can_assign && self.tokenizer.match_token(TokenType::Equal) {
+           //self.expression();
+           self.emit_bytes(set, id);
+       //} else {
+            self.emit_bytes(get, id); 
+      // }
+    }
+
+    fn resolve_local(&mut self, name: &str) -> Option<u8> {
+        let mut res : Option<(u8, Option<usize>)> = None;
+        for (i, local) in self.locals.iter().enumerate().rev() {
+            if local.name == name {
+                res = Some((i as u8, local.depth));
+                break;
+            }
+        }
+        
+        match res {
+            None => None,
+            Some((idx, depth)) => {
+                if depth.is_none() {
+                   // self.error_at_current("Can't read local variable in its own initializer.");
+                    None
+                } else {
+                    Some(idx)
+                }
+            }
+        }
+    }
+
+    fn define_variable(&mut self, global: usize) {
+        if self.scope_depth > 0 {
+            self.mark_initialized();
+            return;
+        }
+        self.emit_bytes(OpCode::DefineGlobal as u8, global as u8);
+    }
+
+    fn declare_variable(&mut self, name: &str) {
+        if self.scope_depth == 0 {
+            return;
+        }
+
+        let mut duplicate_found = false;
+        for local in self.locals.iter().rev() {
+            if let Some(d) = local.depth && d < self.scope_depth {
+                break;
+            }
+            if local.name == name {
+                duplicate_found = true;
+                break;
+            }
+        }
+        
+        if duplicate_found {
+            //self.error_at_current("Already a variable with this name in this scope.");
+            return;
+        }
+        self.add_local(name);
+    }
+
+    fn mark_initialized(&mut self) {
+        if self.scope_depth == 0 {
+            return;
+        }
+
+        match self.locals.last_mut() {
+            None => (),
+            Some(local) => local.depth = Some(self.scope_depth),
+        }
+    }
+
+    fn identifier_constant(&mut self, name: String) -> usize {
+        let string_id = self.take_string(name);
+        let id = self.make_constant(Value::String(string_id));
+        if id > u8::MAX as usize {
+            //self.error_at_current("Too many constants in one chunk.");
+            return 0;
+        }
+        id
+    }
+
+    fn copy_string(&mut self, s: &str) -> i32 {
+        self.common.heap.push(s.to_string());
+        (self.common.heap.len() - 1) as i32
+    }
+
+    fn take_string(&mut self, s: String) -> i32 {
+        self.common.heap.push(s);
+        (self.common.heap.len() - 1) as i32
+    }
+
+    fn add_local(&mut self, name: &str) {
         if self.locals.len() >= u8::MAX as usize {
             //self.error_at_current("Too many local variables in function.");
             return;
         }
-        self.locals.push(LocalVariable { name: name, depth: None });
+        self.locals.push(LocalVariable { name: name.to_string(), depth: None });
     }
 
     fn current_chunk(&mut self) -> &mut Chunk {
@@ -842,7 +858,7 @@ impl<'comp> Compiler<'comp> {
         self.emit_byte(byte2);
     }
 
-    pub fn make_constant(&mut self, value: AstValue) -> usize {
+    pub fn make_constant_ast(&mut self, value: AstValue) -> usize {
         match value {
             AstValue::Float(f) => self.common.constants.push(Value::Float(f)),
             AstValue::Bool(b) => self.common.constants.push(Value::Bool(b)),
@@ -850,6 +866,11 @@ impl<'comp> Compiler<'comp> {
             AstValue::Variable(_) => todo!(),
         }
         
+        self.common.constants.len() - 1
+    }
+
+    pub fn make_constant(&mut self, value: Value) -> usize {
+        self.common.constants.push(value);
         self.common.constants.len() - 1
     }
 
