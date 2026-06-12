@@ -275,3 +275,6 @@ fabric.properties
 # End of https://www.toptal.com/developers/gitignore/api/pycharm+all,django
 
 quanta-lang/.vscode/launch.json
+quanta-lang/.vscode/settings.json
+quanta-lang/.cargo/config.toml
+legacy/quanta-lang/Cargo.lock
