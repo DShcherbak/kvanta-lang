@@ -36,7 +36,8 @@ import { quantaTheme } from "./custom-theme";
 import { drawScript, setup, checkIsCancelled, cancelNow, setIsSafari } from "./canvas-runtime.js";
 
 // WASM glue (wasm-pack output); adjust crate name/path
-import initWasm, { Compiler } from "../legacy/quanta-lang/pkg/quanta_lang.js"; 
+//import initWasm, { Compiler } from "../legacy/quanta-lang/pkg/quanta_lang.js"; 
+import initWasm, { Compiler, Runtime } from "../kvanta-runtime/pkg/kvanta_runtime.js"
 //import { rustHighlighting } from "../grammar/highlight.js";
 
 const runBtn = document.getElementById("runBtn");
@@ -157,15 +158,16 @@ func main() {
 async function tryCompile(editor, src) {
   await initWasm();
   let idle_compiler = Compiler.new();
-  const compilation_result = await idle_compiler.compile_code(src);   // Rust returns drawing commands (string)
-   if (compilation_result.error_code != 0) {
-    const err = compilation_result.get_error();
-    showError(editor.view, err);
-  //   runBtn.disabled = false;
-  //   return;
-   } else {
-  //   showOk(editor);
-   }
+  let result = idle_compiler.compile(src);
+  // const compilation_result = await idle_compiler.compile_code(src);   // Rust returns drawing commands (string)
+  //  if (compilation_result.error_code != 0) {
+  //   const err = compilation_result.get_error();
+  //   showError(editor.view, err);
+  // //   runBtn.disabled = false;
+  // //   return;
+  //  } else {
+  // //   showOk(editor);
+  //  }
 }
 
 let typingTimer = null;
@@ -352,43 +354,46 @@ function doRun() {
       await initWasm();
       const src = editor.state.doc.toString();
       let compiler = Compiler.new();
-      const compilation_result = await compiler.compile_code(src);   // Rust returns drawing commands (string)
-      if (compilation_result.error_code != 0) {
-        const err = compilation_result.get_error();
-        showError(editor, err);
-        alertError(err);
-        runBtn.disabled = false;
-        return;
-      } else {
-        showOk(editor);
-      }
-      setRunningUI();
-      runtime = compilation_result.get_runtime();
-      startExecution();
-      let need_continue = true;
-      while(need_continue) {
-        if (checkIsCancelled()) { return; }
-        let blocks = runtime.get_commands();     
-        for (let i = 0; i < blocks.length; i++) {
-          if (checkIsCancelled()) { return; }
-          const block = blocks[i];
-          let commands = block.get_commands();
-          let blockStatus = block.get_status();
-          drawScript(commands, blockStatus == 0);
-          if (blockStatus == 3) { // Error
-            const err = runtime.get_runtime_error();
-            showError(editor, err);
-            alertError(err);
-            need_continue = false;
-            break;
-           } else if (blockStatus == 2) { // End
-            need_continue = false;
-            break;
-           }
-          await sleep(block.sleep_for);
+      let runtime = Runtime.new();
+      let result = compiler.compile(src);
+      runtime.execute(result);
+      // const compilation_result = await compiler.compile_code(src);   // Rust returns drawing commands (string)
+      // if (compilation_result.error_code != 0) {
+      //   const err = compilation_result.get_error();
+      //   showError(editor, err);
+      //   alertError(err);
+      //   runBtn.disabled = false;
+      //   return;
+      // } else {
+      //   showOk(editor);
+      // }
+      // setRunningUI();
+      // runtime = compilation_result.get_runtime();
+      // startExecution();
+      // let need_continue = true;
+      // while(need_continue) {
+      //   if (checkIsCancelled()) { return; }
+      //   let blocks = runtime.get_commands();     
+      //   for (let i = 0; i < blocks.length; i++) {
+      //     if (checkIsCancelled()) { return; }
+      //     const block = blocks[i];
+      //     let commands = block.get_commands();
+      //     let blockStatus = block.get_status();
+      //     drawScript(commands, blockStatus == 0);
+      //     if (blockStatus == 3) { // Error
+      //       const err = runtime.get_runtime_error();
+      //       showError(editor, err);
+      //       alertError(err);
+      //       need_continue = false;
+      //       break;
+      //      } else if (blockStatus == 2) { // End
+      //       need_continue = false;
+      //       break;
+      //      }
+      //     await sleep(block.sleep_for);
            
-        }
-      }
+      //   }
+      // }
     } catch (e) {
       console.error(e);
       alert("Error: " + (e?.message ?? String(e)));

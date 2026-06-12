@@ -3,10 +3,17 @@ use crate::value::{Function, Value};
 
 use crate::chunk::*;
 
+#[derive(Clone)]
 pub struct CommonMemory {
     pub heap: Vec<String>,
     pub functions: Vec<Function>,
     pub constants: Vec<Value>
+}
+
+impl CommonMemory {
+    pub fn new() -> Self {
+        CommonMemory { heap: vec![] , functions: vec![], constants: vec![] }
+    }
 }
 
 pub struct CallFrame {
@@ -368,33 +375,29 @@ impl VM {
         }
     }
 
-    pub fn take_string(&mut self, s: String) -> i32 {
+    fn take_string(&mut self, s: String) -> i32 {
         self.common.heap.push(s);
         (self.common.heap.len() - 1) as i32
     }
 
-    pub fn push(&mut self, value: Value) {
+    fn push(&mut self, value: Value) {
         self.stack.push(value);
     }
 
-    pub fn pop(&mut self) -> Value {
+    fn pop(&mut self) -> Value {
         self.stack.pop().unwrap_or(Value::Float(0.0))
     }
 
-    pub fn peek(&self, distance: usize) -> Value {
+    fn peek(&self, distance: usize) -> Value {
         self.stack.get(self.stack.len() - 1 - distance).unwrap_or(&Value::Float(0.0)).clone()
     }
 
-    pub fn new() -> Self {
+    pub fn new(common: CommonMemory) -> Self {
         Self {
             frames: vec![],
             stack: vec![],
             variables: HashMap::new(),
-            common: CommonMemory {
-                heap: vec![],
-                functions: vec![],
-                constants: vec![]
-            }
+            common
         }
     }
 
@@ -404,11 +407,5 @@ impl VM {
         for frame in self.frames.iter().rev() {
             println!("[line {}] in {}", frame.function.chunk.lines[frame.ip], frame.function.name);
         }
-    }
-}
-
-impl Default for VM {
-    fn default() -> Self {
-        Self::new()
     }
 }

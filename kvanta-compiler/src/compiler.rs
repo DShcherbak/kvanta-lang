@@ -630,15 +630,15 @@ use crate::scanner::Scanner;
 
 // }
 
-struct Compiler<'comp> {
+struct Compiler {
     function: Function,
-    common: &'comp mut CommonMemory,
+    common: CommonMemory,
     locals: Vec<LocalVariable>,
     scope_depth: usize
 }
 
-impl<'comp> Compiler<'comp> {
-    pub fn new(common: &'comp mut CommonMemory) -> Self {
+impl Compiler {
+    pub fn new(common: CommonMemory) -> Self {
         Compiler { 
             function: Function { 
                 arity: 0, 
@@ -651,7 +651,7 @@ impl<'comp> Compiler<'comp> {
         }
     }
 
-    pub fn compile(&mut self, ast: ProgramAst) -> Result<Function, String> {
+    pub fn compile(&mut self, ast: ProgramAst) -> bool {
         match ast {
             ProgramAst::Forest => {
                 self.function.chunk.push(42, 1);
@@ -666,7 +666,7 @@ impl<'comp> Compiler<'comp> {
                 self.emit_byte(OpCode::Return as u8);
             },
         };
-        Ok(self.function.clone())
+        true
     }
 
     fn begin_scope(&mut self) {
@@ -934,13 +934,18 @@ impl<'comp> Compiler<'comp> {
 
 }
 
-pub fn compile(source: String, common: &mut CommonMemory) -> Result<Function, String> {
+pub fn compile(source: String) -> Result<(Function, CommonMemory), String> {
     let mut scanner = Scanner::new(&source);
     let tokens = scanner.scan_tokens();
     let mut tokenizer = Tokenizer::new(tokens);
     let mut parser = Parser::new(&mut tokenizer);
-
+    let common_memory = CommonMemory::new();
     let ast = parser.compile()?;
-    let mut compiler = Compiler::new(common);
-    compiler.compile(ast)
+    let mut compiler = Compiler::new(common_memory);
+    if compiler.compile(ast) {
+        let Compiler {function, common, locals: _, scope_depth: _ } = compiler;
+        Ok((function, common))
+    } else {
+        Err(String::from("Compilation error"))
+    }
 }
