@@ -1,3 +1,18 @@
+/**
+ * main.js
+ *
+ * Entry point for the Quanta web IDE.
+ *
+ * Responsibilities:
+ *   - Create and configure the CodeMirror 6 editor with Quanta language support.
+ *   - Compile Quanta source via the Rust/WASM `Compiler` on every keystroke
+ *     (debounced 1 s) and on explicit Run.
+ *   - Drive the canvas runtime (`canvas-runtime.js`) frame-by-frame using the
+ *     block-based command stream returned by the WASM runtime.
+ *   - Wire up keyboard and mouse events so the running program can react to input.
+ *   - Handle file load / save and canvas image export.
+ */
+
 // CodeMirror bits (via esm.sh, no local install needed)
 //import { EditorView, lineNumbers, highlightActiveLine } from "@codemirror/view";
 //import { EditorState } from "@codemirror/state";
@@ -36,16 +51,26 @@ import { quantaTheme } from "./custom-theme";
 import { drawScript, setup, checkIsCancelled, cancelNow, setIsSafari } from "./canvas-runtime.js";
 
 // WASM glue (wasm-pack output); adjust crate name/path
-import initWasm, { Compiler } from "../quanta-lang/pkg/quanta_lang.js"; 
+import initWasm, { Compiler } from "../quanta-lang/pkg/quanta_lang.js";
 //import { rustHighlighting } from "../grammar/highlight.js";
 
 const runBtn = document.getElementById("runBtn");
 
+/** The live WASM runtime instance; `undefined` when no program is executing. */
 let runtime = undefined;
+/** True while a program is running (controls the Run/Stop button state). */
 let isRunning = false;
+
+// ---------------------------------------------------------------------------
+// Editor configuration
+// ---------------------------------------------------------------------------
 
 const fourSpaceIndent = indentUnit.of("    "); // 4 spaces
 
+/**
+ * Keymap extension that inserts four spaces on Tab instead of a real tab
+ * character, keeping indentation consistent with the language convention.
+ */
 const insertFourSpaces = keymap.of([{
   key: "Tab",
   run: ({ state, dispatch }) => {
@@ -56,8 +81,17 @@ const insertFourSpaces = keymap.of([{
   }
 }]);
 
+/** Compartment that allows hot-swapping the font-size theme extension. */
 const fontSizeCompartment = new Compartment();
 
+/**
+ * Keymap extension that preserves leading indentation on Enter.
+ *
+ * Extra rules:
+ *   - If the current line ends with `{`, the new line gets an extra 4-space indent.
+ *   - If the current line ends with `{}` and the cursor is between the braces,
+ *     both an indented line and a closing line are inserted.
+ */
 const newlineSameIndent = keymap.of([{
   key: "Enter",
   run: (view) => {
@@ -70,11 +104,11 @@ const newlineSameIndent = keymap.of([{
           if (range.head === line.to) {
           // increase indent after {
           leadingWS += "    "; // add 4 spaces
-          
+
         }
       }
       if (line.text.trimEnd().endsWith("{}")) {
-        if (range.head === line.to - 1) {        
+        if (range.head === line.to - 1) {
         // increase indent after {
           extra += "\n" + leadingWS; // add 4 spaces
           leadingWS += "    "
@@ -91,12 +125,22 @@ const newlineSameIndent = keymap.of([{
   }
 }]);
 
-function showError(editor, err) {
+// ---------------------------------------------------------------------------
+// Diagnostics helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Display a compiler/runtime error as a CodeMirror inline diagnostic.
+ *
+ * @param {import("@codemirror/view").EditorView} editor - The active EditorView.
+ * @param {{ start_row: number, start_column: number, end_row: number, end_column: number, get_error_message(): string }} err
+ */
+export function showError(editor, err) {
   let diagnostics = [];
   const from_line = editor.state.doc.line(Math.max(1, err.start_row));
   const from = Math.min(from_line.to, from_line.from + err.start_column);
   const to_line = editor.state.doc.line(Math.max(1, err.end_row));
-  const to = Math.min(to_line.to, to_line.from + err.end_column); 
+  const to = Math.min(to_line.to, to_line.from + err.end_column);
   diagnostics.push({
     from: from,
     to: to, // adjust for token length if needed
@@ -107,20 +151,36 @@ function showError(editor, err) {
   editor.dispatch(setDiagnostics(editor.state, diagnostics));
 }
 
-function alertError(err) {
-    console.log("Error:" + err.get_error_message() + " at " 
+/**
+ * Log an error to the browser console and show a native alert with
+ * the source location and message.
+ *
+ * @param {{ start_row: number, start_column: number, end_row: number, end_column: number, get_error_message(): string }} err
+ */
+export function alertError(err) {
+    console.log("Error:" + err.get_error_message() + " at "
         + err.start_row + ":" + err.start_column
         + " - " + err.end_row + ":" + err.end_column);
     alert("Error at " + err.start_row + ":" + err.start_column + " - " + err.end_row + ":" + err.end_column + "\n" + err.get_error_message());
 }
 
-function showOk(editor) {
+/**
+ * Clear all inline diagnostics from the editor.
+ *
+ * @param {import("@codemirror/view").EditorView} editor
+ */
+export function showOk(editor) {
   editor.dispatch(setDiagnostics(editor.state, []));
 }
+
+// ---------------------------------------------------------------------------
+// Editor initial content
+// ---------------------------------------------------------------------------
 
 const STORAGE_KEY = "quanta-editor-code";
 
 const savedCode = localStorage.getItem(STORAGE_KEY);
+/** Default program shown when no saved code exists in localStorage. */
 const startCode = savedCode || `func mouse(int z, int y) {
     setFigureColor(Color::Red);
     rectangle(z, y, z+100, y+100);
@@ -154,6 +214,18 @@ func main() {
 
 `;
 
+// ---------------------------------------------------------------------------
+// Background compile (on typing)
+// ---------------------------------------------------------------------------
+
+/**
+ * Compile `src` with a fresh WASM `Compiler` instance and show any error
+ * as an inline diagnostic in the editor.
+ * Called in the background while the user types; does not start execution.
+ *
+ * @param {{ view: import("@codemirror/view").EditorView }} editor - EditorView or update object.
+ * @param {string} src - Full source text to compile.
+ */
 async function tryCompile(editor, src) {
   await initWasm();
   let idle_compiler = Compiler.new();
@@ -168,9 +240,15 @@ async function tryCompile(editor, src) {
    }
 }
 
+/** Handle for the debounce timer used by `onTyping`. */
 let typingTimer = null;
 
-const onTyping = EditorView.updateListener.of(update => { 
+/**
+ * CodeMirror update listener that debounces background compilation.
+ * On every document change it resets the 1-second timer, then compiles and
+ * persists the source to localStorage when the user pauses typing.
+ */
+const onTyping = EditorView.updateListener.of(update => {
   if (update.docChanged) {
     update.view.dispatch(setDiagnostics(update.state, []));
     clearTimeout(typingTimer);
@@ -186,8 +264,17 @@ const onTyping = EditorView.updateListener.of(update => {
   }
 });
 
-// Create a theme factory for font size
-function fontSizeTheme(sizePx) {
+// ---------------------------------------------------------------------------
+// Font-size controls
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a CodeMirror theme that applies `sizePx` to editor content and gutters.
+ *
+ * @param {number} sizePx - Font size in pixels.
+ * @returns {import("@codemirror/view").Extension}
+ */
+export function fontSizeTheme(sizePx) {
   return EditorView.theme({
     ".cm-content": { fontSize: sizePx + "px" },
     ".cm-line":    { fontSize: sizePx + "px" },
@@ -199,7 +286,11 @@ function fontSizeTheme(sizePx) {
 let currentFontSize = 18;
 let fontSizeExt = fontSizeTheme(currentFontSize);
 
-// Key bindings to adjust font size
+/**
+ * Keymap extension for runtime font-size adjustment:
+ *   - `Mod-=`  → increase font size by 1 px.
+ *   - `Mod--`  → decrease font size by 1 px (minimum 8 px).
+ */
 const fontSizeKeys = keymap.of([
   {
     key: "Mod-=",
@@ -223,9 +314,18 @@ const fontSizeKeys = keymap.of([
   }
 ]);
 
+// ---------------------------------------------------------------------------
+// Safari detection
+// ---------------------------------------------------------------------------
+
+/** True when the page is running in Safari (detected via user-agent). */
 let itIsSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
 setIsSafari(itIsSafari);
+
+// ---------------------------------------------------------------------------
+// Editor instantiation
+// ---------------------------------------------------------------------------
 
 const editor = new EditorView({
   state: EditorState.create({
@@ -296,23 +396,34 @@ const editor = new EditorView({
     //   history(),
     //   autocompletion(),
     //   quanta(),
-    //   
+    //
     //   oneDark
     // ]
   }),
   parent: document.getElementById("editor")
 });
 
+// ---------------------------------------------------------------------------
+// Execution helpers
+// ---------------------------------------------------------------------------
+
+/** Clear all inline diagnostics from the global editor instance. */
 function clearErrors() {
   editor.dispatch(setDiagnostics(editor.state, []));
 }
 
-
-
-function sleep(ms) {
+/**
+ * Return a Promise that resolves after `ms` milliseconds.
+ * Used to yield control between animation frames in `doRun`.
+ *
+ * @param {number} ms
+ * @returns {Promise<void>}
+ */
+export function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+/** Cancel the running program and clear the runtime reference. */
 function doStop() {
   (async() => {
     runtime = undefined;
@@ -320,14 +431,29 @@ function doStop() {
   })();
 }
 
+/**
+ * Invoke the runtime's main entry point asynchronously.
+ * The runtime begins producing command blocks that `doRun` will consume.
+ */
 async function startExecution() {
   let res = runtime.execute();
 }
 
+/**
+ * Forward a keyboard event key string to the running program's `keyboard` handler.
+ *
+ * @param {string} key - Key value string (e.g. `"a"`, `"Enter"`, `"ArrowUp"`).
+ */
 async function executeKey(key) {
   let res = runtime.execute_key(key);
 }
 
+/**
+ * Forward canvas-relative coordinates to the running program's `mouse` handler.
+ *
+ * @param {number} x - X position in logical canvas units (0–1000).
+ * @param {number} y - Y position in logical canvas units (0–1000).
+ */
 async function executeMouse(x, y) {
   let res = runtime.execute_mouse(x, y);
 }
@@ -342,6 +468,20 @@ async function executeMouse(x, y) {
 //   }
 // });
 
+/**
+ * Compile and execute the current editor source.
+ *
+ * Flow:
+ *   1. Reset cancellation state and canvas.
+ *   2. Compile with a fresh WASM `Compiler`; show error and abort on failure.
+ *   3. Obtain the WASM runtime and call `startExecution()`.
+ *   4. Poll `runtime.get_commands()` in a loop, rendering each block via
+ *      `drawScript`.  Block status codes:
+ *        - `0` → frame complete (composite the buffer to the visible canvas).
+ *        - `2` → program ended normally.
+ *        - `3` → runtime error (show error, stop loop).
+ *   5. Restore idle UI state when done.
+ */
 function doRun() {
   (async () => {
     try {
@@ -368,7 +508,7 @@ function doRun() {
       let need_continue = true;
       while(need_continue) {
         if (checkIsCancelled()) { return; }
-        let blocks = runtime.get_commands();     
+        let blocks = runtime.get_commands();
         for (let i = 0; i < blocks.length; i++) {
           if (checkIsCancelled()) { return; }
           const block = blocks[i];
@@ -386,7 +526,7 @@ function doRun() {
             break;
            }
           await sleep(block.sleep_for);
-           
+
         }
       }
     } catch (e) {
@@ -399,6 +539,11 @@ function doRun() {
   })();
 }
 
+// ---------------------------------------------------------------------------
+// UI state helpers
+// ---------------------------------------------------------------------------
+
+/** Switch the Run button to "Stop" and focus the canvas. */
 function setRunningUI() {
   isRunning = true;
   runBtn.textContent = 'Stop';
@@ -407,6 +552,7 @@ function setRunningUI() {
   canvas.focus();
 }
 
+/** Switch the Run button back to "Run your program!" and mark execution idle. */
 function setIdleUI() {
   isRunning = false;
   runBtn.textContent = 'Run your program!';
@@ -414,6 +560,11 @@ function setIdleUI() {
   runBtn.disabled = false;
 }
 
+// ---------------------------------------------------------------------------
+// Event listeners
+// ---------------------------------------------------------------------------
+
+/** Toggle between running and stopping the program when the button is clicked. */
 runBtn.addEventListener('click', () => {
   if (!isRunning) {
     doRun();
@@ -422,6 +573,11 @@ runBtn.addEventListener('click', () => {
   }
 });
 
+/**
+ * Forward keyboard events to the running program.
+ * Only active when the canvas element has focus, so editor shortcuts
+ * are not accidentally captured.
+ */
 window.addEventListener('keydown', (e) => {
   if (!runtime) return;
   if (document.activeElement !== canvas) return;
@@ -432,6 +588,10 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Pane resizer (drag handle between editor and canvas)
+// ---------------------------------------------------------------------------
+
 const resizer = document.getElementById('resizer');
 const panes = document.querySelector('.panes');
 let isDragging = false;
@@ -441,6 +601,7 @@ resizer.addEventListener('mousedown', (e) => {
   document.body.style.cursor = 'col-resize';
 });
 
+/** Update the CSS grid column sizes while the user drags the handle. */
 window.addEventListener('mousemove', (e) => {
   if (!isDragging) return;
   const totalWidth = panes.getBoundingClientRect().width;
@@ -454,6 +615,10 @@ window.addEventListener('mouseup', () => {
   document.body.style.cursor = '';
 });
 
+/**
+ * Forward canvas click coordinates (normalised to 0–1000 logical units)
+ * to the running program's `mouse` handler.
+ */
 document.getElementById("canvas").addEventListener('click', (e) => {
   if (!runtime) return;
 
@@ -471,7 +636,17 @@ document.getElementById("canvas").addEventListener('click', (e) => {
   }
 });
 
-function downloadFile(filename, text) {
+// ---------------------------------------------------------------------------
+// File I/O
+// ---------------------------------------------------------------------------
+
+/**
+ * Trigger a browser download of `text` as a plain-text file named `filename`.
+ *
+ * @param {string} filename - Suggested download filename.
+ * @param {string} text     - File contents.
+ */
+export function downloadFile(filename, text) {
   const blob = new Blob([text], { type: "text/plain" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -481,6 +656,7 @@ function downloadFile(filename, text) {
   URL.revokeObjectURL(url);
 }
 
+/** Download the current editor source as a `.quanta` file. */
 document.getElementById("downloadBtn").addEventListener("click", () => {
   const code = editor.state.doc.toString();
 
@@ -499,11 +675,13 @@ document.getElementById("downloadBtn").addEventListener("click", () => {
 // Load file on demand
 const fileInput = document.getElementById("fileInput");
 
+/** Open the system file picker to load a `.quanta` source file. */
 document.getElementById("loadBtn").addEventListener("click", () => {
   fileInput.value = ""; // reset so selecting the same file again still triggers
   fileInput.click();    // open system file picker
 });
 
+/** Export the current canvas contents as a JPEG image. */
 document.getElementById("saveBtn").addEventListener("click", () => {
   const canvas = document.getElementById("canvas");
   const image = canvas.toDataURL("image/jpeg", 0.95); // 0.95 is quality
@@ -517,6 +695,7 @@ document.getElementById("saveBtn").addEventListener("click", () => {
   link.click();
 });
 
+/** Read the selected file and replace the editor's content with its text. */
 fileInput.addEventListener("change", (e) => {
   const file = e.target.files[0];
   if (!file) return;

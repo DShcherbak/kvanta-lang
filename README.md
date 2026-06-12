@@ -242,3 +242,19 @@ kvanta-lang/
 - **Vite** — frontend build tool and dev server
 - **HTML5 Canvas** — rendering target
 
+## Running web runtime tests
+
+Install dependencies first (only needed once):
+```
+npm install
+```
+
+Run all unit tests once:
+```
+npm test
+```
+
+Run in watch mode (re-runs on file save):
+```
+npm run test:watch
+```
