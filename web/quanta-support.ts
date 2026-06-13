@@ -74,9 +74,8 @@
 
 import {parser} from "../grammar/grammar.js";
 import {LRLanguage, LanguageSupport, indentNodeProp, foldNodeProp, foldInside, delimitedIndent, HighlightStyle, syntaxHighlighting} from "@codemirror/language"
-import {highlightCode, highlightTree, styleTags, tags as t} from "@lezer/highlight"
+import {styleTags, tags as t} from "@lezer/highlight"
 import {completeFromList} from "@codemirror/autocomplete"
-import { rustHighlighting } from "../grammar/highlight.js";
 
 export const quantaHighlightStyle = HighlightStyle.define([
   // keywords
@@ -139,18 +138,12 @@ export const QuantaLanguage = LRLanguage.define({
   }
 })
 
-
-
-
-
-
-export const quantaCompletion = QuantaLanguage.data.of({
-  autocomplete: completeFromList([
-    {label: "bool", type: "keyword"},
-    {label: "int", type: "keyword"},
-    {label: "float", type: "keyword"},
-    {label: "Color", type: "keyword"},
-     {label: "Red", type: "keyword"},
+export const rawCompletionItems = [
+  {label: "bool", type: "keyword"},
+  {label: "int", type: "keyword"},
+  {label: "float", type: "keyword"},
+  {label: "Color", type: "keyword"},
+  {label: "Red", type: "keyword"},
   {label: "DarkRed", type: "keyword"},
   {label: "LightRed", type: "keyword"},
 
@@ -196,12 +189,15 @@ export const quantaCompletion = QuantaLanguage.data.of({
   {label: "Transparent", type: "keyword"},
   {label: "Random", type: "keyword"},
 
-    {label: "circle", type: "function"},
-    {label: "rectangle", type: "function"},
-    {label: "line", type: "function"},
-    {label: "setLineColor", type: "function"},
-    {label: "setFigureColor", type: "function"},
-  ])
+  {label: "circle", type: "function"},
+  {label: "rectangle", type: "function"},
+  {label: "line", type: "function"},
+  {label: "setLineColor", type: "function"},
+  {label: "setFigureColor", type: "function"},
+];
+
+export const quantaCompletion = QuantaLanguage.data.of({
+  autocomplete: completeFromList(rawCompletionItems)
 })
 
 export function quanta() {

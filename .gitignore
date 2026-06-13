@@ -277,4 +277,4 @@ fabric.properties
 quanta-lang/.vscode/launch.json
 quanta-lang/.vscode/settings.json
 quanta-lang/.cargo/config.toml
-quanta-lang/Cargo.lock
+legacy/quanta-lang/Cargo.lock
