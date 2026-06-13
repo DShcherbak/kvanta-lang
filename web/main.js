@@ -495,8 +495,33 @@ function doRun() {
       const src = editor.state.doc.toString();
       let compiler = Compiler.new();
       let runtime = Runtime.new();
-      let result = compiler.compile(src);
-      runtime.execute(result);
+      const compilation_result = await compiler.compile(src);
+      console.log("Bytes: ", compilation_result.bytes());
+      runtime.execute(compilation_result);
+      let need_continue = true;
+      while(need_continue) {
+        if (checkIsCancelled()) { return; }
+        let command = runtime.get_command();
+        drawScript(command, true);
+        if (command == "EXIT") {
+          need_continue = false;
+        }
+      }
+      //   // if (blockStatus == 3) { // Error
+      //   //   const err = runtime.get_runtime_error();
+      //   //   showError(editor, err);
+      //   //   alertError(err);
+      //   //   need_continue = false;
+      //   //   break;
+      //   //   } else if (blockStatus == 2) { // End
+      //   //   need_continue = false;
+      //   //   break;
+      //   //   }
+      //  // await sleep(block.sleep_for);
+           
+        
+      // }
+
       // const compilation_result = await compiler.compile_code(src);   // Rust returns drawing commands (string)
       // if (compilation_result.error_code != 0) {
       //   const err = compilation_result.get_error();

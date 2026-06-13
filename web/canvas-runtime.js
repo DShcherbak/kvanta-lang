@@ -256,6 +256,14 @@ function drawArc(cx, cy, r, a0, a1, ccw, o) {
   if (o.stroke || !o.fill) ctx.stroke();
 }
 
+function globalOptions() {
+  let og = {};
+  og.fill = "#ff0000";
+  og.stroke = "#00ff00";
+  og.width = 1;
+  return og;
+}
+
 // ---------------------------------------------------------------------------
 // Script executor
 // ---------------------------------------------------------------------------
@@ -283,25 +291,25 @@ function drawArc(cx, cy, r, a0, a1, ccw, o) {
  * @param {boolean}  [should_draw_frame=false] - Force a composite to the visible
  *                                               canvas even when in animation mode.
  */
-export function drawScript(script, should_draw_frame = false) {
+export function drawScript(raw, should_draw_frame = false) {
   ctx.save(); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
 
-  for (var i = 0; i < script.length; i += 1) {
-    let raw = script[i];
+ // for (var i = 0; i < script.length; i += 1) {
+   // let raw = script[i];
     if (isCancelled) { return; }
 
     const line = raw.trim();
-    if (!line || line.startsWith('//')) continue;
+    if (!line || line.startsWith('//')) return;
 
     const tok = tokenize(line);
-    if (!tok.length) continue;
+    if (!tok.length) return;
 
     const cmd = tok[0].toLowerCase();
     try {
       switch (cmd) {
         case 'circle': {
           const [_, cx, cy, r] = tok;
-          const o = parseOptions(tok, 4);
+          const o = globalOptions();
           applyStyle(o); drawCircle(cx, cy, r, o);
           break;
         }
@@ -350,7 +358,7 @@ export function drawScript(script, should_draw_frame = false) {
         default: /* ignore unknown commands */ break;
       }
     } catch (e) { console.warn('Error:', line, e); }
-  }
+//  }
 
   ctx.restore();
 
