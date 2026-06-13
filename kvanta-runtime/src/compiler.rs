@@ -43,7 +43,7 @@ impl Compiler {
                 executable: Some(Executable { function, common }),
             },
             Err(mes) => {
-                alert(&mes);
+               // alert(&mes);
                 CompilationResult {
                     code: 1,
                     executable: None,

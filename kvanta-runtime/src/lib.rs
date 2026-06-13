@@ -20,7 +20,7 @@ impl Runtime {
 
     pub fn execute(&mut self, compilation: CompilationResult) {
         if compilation.code != 0 {
-            alert("Compilation fail");
+            //alert("Compilation fail");
             return;
         }
         let InternalExecutable { function, common } =
