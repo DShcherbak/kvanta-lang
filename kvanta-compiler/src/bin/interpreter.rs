@@ -13,12 +13,13 @@ fn interpret(vm: &mut VM, source: String) -> InterpretResult {
         }
         Ok((function, common)) => {
             // DEBUG
+            *vm = VM::new(common);
             println!("Compiled function: {:?}", function);
+            println!("CommonMemory: {:?}", vm.common);
             print(&function.chunk, &function.name, vm);
             for funct in vm.common.functions.iter() {
                 print(&funct.chunk, &funct.name, vm);
             }
-            *vm = VM::new(common);
             vm.call(function, 0);
             vm.run()
         },

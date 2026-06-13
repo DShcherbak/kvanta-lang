@@ -902,14 +902,14 @@ impl Compiler {
         id
     }
 
-    fn copy_string(&mut self, s: &str) -> i32 {
+    fn copy_string(&mut self, s: &str) -> usize {
         self.common.heap.push(s.to_string());
-        (self.common.heap.len() - 1) as i32
+        (self.common.heap.len() - 1)
     }
 
-    fn take_string(&mut self, s: String) -> i32 {
+    fn take_string(&mut self, s: String) -> usize {
         self.common.heap.push(s);
-        (self.common.heap.len() - 1) as i32
+        (self.common.heap.len() - 1)
     }
 
     fn add_local(&mut self, name: &str) {

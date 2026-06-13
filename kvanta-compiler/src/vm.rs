@@ -7,7 +7,7 @@ use crate::chunk::*;
 
 #[derive(Clone, Debug)]
 pub struct CommonMemory {
-    pub heap: Vec<String>,
+pub heap: Vec<String>,
     pub functions: Vec<Function>,
     pub constants: Vec<Value>
 }
@@ -328,12 +328,18 @@ impl VM {
                     OpCode::Call => {
                         if let Some(arg_count) = self.read_byte() {
                             let callee = self.peek(arg_count as usize);
-                            if let Value::Function(fun_id) = callee {
-                                if let Some(function) = self.common.functions.get(fun_id).cloned() {
-                                    self.call(function, arg_count);
-                                } else {
-                                    println!("ERR: INVALID FUNCTION ID");
-                                    return InterpretResult::RuntimeError;
+                            /// TODO REWRITE
+                            /// TODO ERROR IF NO FUNCTION FOUND
+                            if let Value::Function(fun_name_id) = callee {
+                                if let Some(Value::String(name)) = self.common.constants.get(fun_name_id) {
+                                    if let Some(function_name) = self.common.heap.get(*name) {
+                                        for func in &self.common.functions {
+                                            if func.name == *function_name {
+                                                self.call(func.clone(), arg_count);
+                                                break;
+                                            }
+                                        }
+                                    }
                                 }
                             } else {
                                 println!("ERR: CAN ONLY CALL FUNCTIONS");
@@ -356,7 +362,8 @@ impl VM {
                                                 x as i32, 
                                                 y as i32, 
                                                 r as i32
-                                            ))
+                                            ));
+                                        println!("circle {} {} {}", x, y, r);
                                     }
                                     
                                 },
@@ -411,9 +418,9 @@ impl VM {
         }
     }
 
-    fn take_string(&mut self, s: String) -> i32 {
+    fn take_string(&mut self, s: String) -> usize {
         self.common.heap.push(s);
-        (self.common.heap.len() - 1) as i32
+        (self.common.heap.len() - 1) as usize
     }
 
     fn push(&mut self, value: Value) {
