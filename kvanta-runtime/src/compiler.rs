@@ -18,6 +18,13 @@ impl CompilationResult {
             None => panic!("No executable!"),
         }
     }
+
+    pub fn bytes(&self) -> Vec<u8> {
+        match &self.executable {
+            None => vec![],
+            Some(ex) => ex.function.chunk.chunk.clone()
+        }
+    }
 }
 
 #[wasm_bindgen]

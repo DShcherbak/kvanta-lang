@@ -29,6 +29,7 @@ pub enum OpCode {
     Jump = 22,
     Loop = 23,
     Call = 24,
+    Native = 25
 }
 
 pub fn from(value: u8) -> Option<OpCode> {

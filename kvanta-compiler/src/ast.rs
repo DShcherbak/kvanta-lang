@@ -32,7 +32,8 @@ pub enum AstValue {
 pub enum ExpressionAst {
     Value(AstValue),
     Unary(UnaryOperator, Box<ExpressionAst>),
-    Binary(BinaryOperator, Box<ExpressionAst>, Box<ExpressionAst>)
+    Binary(BinaryOperator, Box<ExpressionAst>, Box<ExpressionAst>),
+    FunctionCall(Box<ExpressionAst>, Vec<Box<ExpressionAst>>),
 }
 
 #[derive(Debug, Clone, PartialEq)]

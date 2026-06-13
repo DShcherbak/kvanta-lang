@@ -1,18 +1,28 @@
 use std::collections::HashMap;
+use crate::canvas::{construct_canvas, Canvas, CanvasCommand, CanvasReader};
 use crate::value::{Function, Value};
+use crossbeam_channel::{unbounded, TryRecvError};
 
 use crate::chunk::*;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CommonMemory {
     pub heap: Vec<String>,
     pub functions: Vec<Function>,
     pub constants: Vec<Value>
 }
 
+pub enum NativeCall {
+    Circle(i32, i32, i32),
+    Exit,
+}
+
 impl CommonMemory {
     pub fn new() -> Self {
-        CommonMemory { heap: vec![] , functions: vec![], constants: vec![] }
+        let builtin = vec![
+            Function { arity: 3, chunk: Chunk { chunk: vec![25, 0, 0], lines: vec![0, 0, 0] }, name: String::from("circle") }
+        ];
+        CommonMemory { heap: vec![] , functions: builtin, constants: vec![] }
     }
 }
 
@@ -27,6 +37,8 @@ pub struct VM {
     stack: Vec<Value>,
     variables: HashMap<String, Value>,
     pub common: CommonMemory,
+    canvas_reader: CanvasReader,
+    canvas: Canvas
 }
 
 // Accepts an operator, pops two values from the stack, applies the operator, and pushes the result back on the stack.
@@ -103,6 +115,7 @@ impl VM {
                         let return_value = self.pop();
                         self.frames.pop();
                         if self.frames.is_empty() {
+                            self.canvas.add_command(crate::canvas::CanvasCommand::Exit);
                             return InterpretResult::Ok;
                         }
                         self.push(return_value);
@@ -316,7 +329,7 @@ impl VM {
                         if let Some(arg_count) = self.read_byte() {
                             let callee = self.peek(arg_count as usize);
                             if let Value::Function(fun_id) = callee {
-                                if let Some(function) = self.common.functions.get(fun_id as usize).cloned() {
+                                if let Some(function) = self.common.functions.get(fun_id).cloned() {
                                     self.call(function, arg_count);
                                 } else {
                                     println!("ERR: INVALID FUNCTION ID");
@@ -331,6 +344,29 @@ impl VM {
                             return InterpretResult::RuntimeError;
                         }
                     },
+                    OpCode::Native => {
+                        if let Some(id) = self.read_byte() {
+                            match id {
+                                0 => {
+                                    if let Value::Float(x) = self.peek(2) 
+                                    && let Value::Float(y) = self.peek(1) 
+                                    && let Value::Float(r) = self.peek(0) {
+                                        self.canvas.add_command(
+                                            CanvasCommand::Circle(
+                                                x as i32, 
+                                                y as i32, 
+                                                r as i32
+                                            ))
+                                    }
+                                    
+                                },
+                                _ => self.canvas.add_command(CanvasCommand::Exit)
+                            }
+                        } else {
+                            println!("ERR: NO LOCAL VARIABLES");
+                        }
+                        
+                    }
                 }
             } else {
                 println!("ERR: END OF EXECUTION");
@@ -393,12 +429,19 @@ impl VM {
     }
 
     pub fn new(common: CommonMemory) -> Self {
+        let (canvas, canvas_reader) = construct_canvas();
         Self {
             frames: vec![],
             stack: vec![],
             variables: HashMap::new(),
-            common
+            common,
+            canvas_reader,
+            canvas
         }
+    }
+
+    pub fn get_command(&self) -> Option<crate::canvas::CanvasCommand> {
+        self.canvas_reader.get_command()
     }
 
     fn runtime_error(&self, message: &str) {

@@ -663,6 +663,7 @@ impl Compiler {
                     self.statement(statement);
                 }
                 self.end_scope();
+                //self.emit_byte(OpCode::Native as u8); // TODO REMOVE
                 self.emit_byte(OpCode::Return as u8);
             },
         };
@@ -715,6 +716,7 @@ impl Compiler {
                     self.assign(*lhs, *rhs);
                     return;
                 }
+                
                 self.expression(*lhs);
                 self.expression(*rhs);
                 match op {
@@ -723,9 +725,25 @@ impl Compiler {
                     BinaryOperator::Mult => self.emit_byte(OpCode::Multiply as u8),
                     BinaryOperator::Divide => self.emit_byte(OpCode::Divide as u8),
                     BinaryOperator::Assign => (),
-                    BinaryOperator::Call => todo!(),
+                    BinaryOperator::Call => {
+
+                    },
                 }
             },
+            ExpressionAst::FunctionCall(callee, args) => {
+                if let ExpressionAst::Value(AstValue::Variable(name)) = *callee {
+                    let name_id = self.identifier_constant(name);
+                    let func_id = self.make_constant(Value::Function(name_id));
+                    self.emit_bytes(OpCode::Constant as u8, func_id as u8);
+                    let argc = args.len() as u8;
+                    for arg in args {
+                        self.expression(*arg);
+                    }
+                    self.emit_bytes(OpCode::Call as u8, argc);
+                }
+                
+
+            }
         }
     }
 
@@ -920,8 +938,14 @@ impl Compiler {
         match value {
             AstValue::Float(f) => self.common.constants.push(Value::Float(f)),
             AstValue::Bool(b) => self.common.constants.push(Value::Bool(b)),
-            AstValue::String(_) => todo!(),
-            AstValue::Variable(_) => todo!(),
+            AstValue::String(s) => {
+                let id = self.take_string(s);
+                self.common.constants.push(Value::String(id));
+            },
+            AstValue::Variable(s) => {
+                let id = self.take_string(s);
+                self.common.constants.push(Value::String(id));
+            },
         }
         
         self.common.constants.len() - 1

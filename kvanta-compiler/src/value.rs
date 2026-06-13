@@ -13,7 +13,7 @@ pub enum Value {
     Bool(bool),
     Nil,
     String(i32),
-    Function(i32),
+    Function(usize),
 }
 
 pub type ValueArray = Vec<Value>;

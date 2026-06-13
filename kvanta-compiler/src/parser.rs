@@ -746,13 +746,13 @@ impl<'src, 'a> Parser<'src, 'a> {
         Ok(())
     }
 
-    fn argument_list(&mut self) -> Result<usize, String> {
-        let mut arg_count = 0;
+    fn argument_list(&mut self) -> Result<Vec<Box<ExpressionAst>>, String> {
+        let mut result = vec![];
         if !self.tokenizer.check(TokenType::RightParen) {
             loop {
-                self.expression();
-                arg_count += 1;
-                if arg_count > u8::MAX as usize {
+                let expr = self.expression()?;
+                result.push(Box::new(expr));
+                if result.len() > u8::MAX as usize {
                     return Err(self.error_at_current("Can't have more than 255 arguments."));
                 }
                 if !self.tokenizer.match_token(TokenType::Comma) {
@@ -761,20 +761,16 @@ impl<'src, 'a> Parser<'src, 'a> {
             }
         }
         consume!(self, TokenType::RightParen, "Expect ')' after arguments.");
-        Ok(arg_count)
+        Ok(result)
     }
 
     fn call(&mut self) -> Result<(), String> {
-        let arg_count = self.argument_list()?;
-        if arg_count > u8::MAX as usize {
-            return Err(self.error_at_current("Can't have more than 255 arguments."));
-        }
+        let args: Vec<Box<ExpressionAst>> = self.argument_list()?;
         let callee = self.precedence_stack.pop().unwrap();
         self.precedence_stack.push(
-            ExpressionAst::Binary(
-                BinaryOperator::Call, 
+            ExpressionAst::FunctionCall(
                 Box::new(callee), 
-                Box::new(ExpressionAst::Value(AstValue::Float(arg_count as f32)))
+                args
             )
         );
         Ok(())

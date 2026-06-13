@@ -1,23 +1,24 @@
 use std::env;
 
-use kvanta_compiler::vm::InterpretResult;
+use kvanta_compiler::vm::{CommonMemory, InterpretResult};
 use kvanta_compiler::compiler::compile;
 use kvanta_compiler::vm::VM;
 use kvanta_compiler::debug::print;
 
 fn interpret(vm: &mut VM, source: String) -> InterpretResult {
-    match compile(source, &mut vm.common) {
+    match compile(source) {
         Err(error) => {
             println!("Compile error: {}", error);
             InterpretResult::CompileError
         }
-        Ok(function) => {
+        Ok((function, common)) => {
             // DEBUG
             println!("Compiled function: {:?}", function);
             print(&function.chunk, &function.name, vm);
             for funct in vm.common.functions.iter() {
                 print(&funct.chunk, &funct.name, vm);
             }
+            *vm = VM::new(common);
             vm.call(function, 0);
             vm.run()
         },
@@ -26,7 +27,7 @@ fn interpret(vm: &mut VM, source: String) -> InterpretResult {
 
 fn repl() {
     let mut line : String = String::new();
-    let mut vm = VM::new();
+    let mut vm = VM::new(CommonMemory::new());
     loop {
         println!("> ");
         std::io::stdin().read_line(&mut line).expect("Failed to read line");
@@ -37,7 +38,7 @@ fn repl() {
 
 fn run_file(args: &[String]) -> InterpretResult{
     let filename = &args[1];
-    let mut vm = VM::new();
+    let mut vm = VM::new(CommonMemory::new());
     match std::fs::read_to_string(filename) {
         Ok(contents) => interpret(&mut vm, contents),
         Err(error) => {
